@@ -3,73 +3,71 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { Persona, AgentReport, Project } from "./types";
 
 /**
- * Security and Debugging Utility
+ * FocalPoint Internal Logger for Debugging & Performance Monitoring
  */
-const FocalPointDebug = {
-  log: (stage: string, message: any) => {
-    console.debug(`[FocalPoint DEBUG][${stage}]`, message);
-  },
-  error: (stage: string, error: any) => {
-    console.error(`[FocalPoint ERROR][${stage}]`, error);
-  }
+const FocalPointLogger = {
+  info: (stage: string, data: any) => console.debug(`[FocalPoint][INFO][${stage}]`, data),
+  warn: (stage: string, msg: string) => console.warn(`[FocalPoint][WARN][${stage}]`, msg),
+  error: (stage: string, err: any) => console.error(`[FocalPoint][ERROR][${stage}]`, err)
 };
 
 /**
- * Validates the runtime environment and project data for security.
+ * Security Audit: Ensures all necessary credentials and data points are valid.
  */
-const validateContext = (project: Project) => {
+const securityAudit = (project: Project) => {
   if (!process.env.API_KEY) {
-    throw new Error("AUTH_ERR: API Key is not configured in the environment.");
+    throw new Error("SEC_ERR_01: API Configuration Missing.");
   }
   if (!project.title || project.title.trim().length === 0) {
-    throw new Error("DATA_ERR: Project title is mandatory.");
+    throw new Error("DATA_ERR_01: Invalid Project Metadata.");
   }
   if (!project.videoFile) {
-    throw new Error("DATA_ERR: No video asset provided for analysis.");
+    throw new Error("DATA_ERR_02: Video asset is required for multimodal appraisal.");
   }
 };
 
 /**
- * Converts file to Base64 with integrity and size checks.
+ * Safely converts video file to Base64 for the Gemini API.
  */
 export const fileToBytes = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
-    FocalPointDebug.log("Ingest", `Processing ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+    FocalPointLogger.info("Asset_Ingest", { name: file.name, size: `${(file.size / 1024 / 1024).toFixed(2)} MB` });
     
-    // Safety check for browser memory limits (2GB hard cap, but 1GB is safer for strings)
-    if (file.size > 1.5 * 1024 * 1024 * 1024) {
-      return reject(new Error("LIMIT_ERR: File size exceeds browser memory limits for direct processing."));
+    // Safety check: 1GB limit for browser strings to prevent crash
+    if (file.size > 1024 * 1024 * 1024) {
+      return reject(new Error("MEM_ERR: File exceeds 1GB. Please use a compressed proxy for web-based appraisal."));
     }
 
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
-      if (!result) return reject(new Error("FILE_ERR: Null result from reader."));
-      
+      if (!result) return reject(new Error("FILE_ERR: Stream read resulted in null output."));
       const base64 = result.split(',')[1];
-      FocalPointDebug.log("Encoding", "Base64 conversion successful.");
+      FocalPointLogger.info("Asset_Encoding", "Base64 stream generated successfully.");
       resolve(base64);
     };
-    reader.onerror = () => reject(new Error("FILE_ERR: Failed to read asset stream. Check file permissions."));
+    reader.onerror = () => {
+      FocalPointLogger.error("Asset_Encoding", "Critical failure reading local file stream.");
+      reject(new Error("FILE_ERR: Resource inaccessible or corrupted."));
+    };
     reader.readAsDataURL(file);
   });
 };
 
 /**
- * Robust JSON extraction for non-standard model outputs.
+ * Fallback parser for JSON output.
  */
-const extractJSON = (text: string) => {
+const safeParseReport = (text: string): any => {
   try {
     return JSON.parse(text);
   } catch (e) {
-    FocalPointDebug.log("Parsing", "Response not pure JSON, attempting pattern match extraction.");
-    const firstBrace = text.indexOf('{');
-    const lastBrace = text.lastIndexOf('}');
-    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-      const cleanJson = text.substring(firstBrace, lastBrace + 1);
-      return JSON.parse(cleanJson);
+    FocalPointLogger.warn("Parsing", "Response not pure JSON. Attempting structural extraction.");
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start !== -1 && end !== -1 && end > start) {
+      return JSON.parse(text.substring(start, end + 1));
     }
-    throw new Error("PARSE_ERR: Model failed to provide a valid JSON report.");
+    throw new Error("PARSE_ERR: Model response format incompatible with internal schema.");
   }
 };
 
@@ -78,14 +76,15 @@ export const generateAgentReport = async (
   project: Project,
   videoBase64?: string
 ): Promise<AgentReport> => {
-  validateContext(project);
+  // Pre-flight security and data check
+  securityAudit(project);
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const model = "gemini-3-flash-preview"; 
+  const modelName = "gemini-3-flash-preview"; 
 
   const parts: any[] = [];
 
-  // Add video as inline data
+  // Inject Video Modality
   if (videoBase64) {
     parts.push({
       inlineData: {
@@ -98,36 +97,36 @@ export const generateAgentReport = async (
   const langName = project.language === 'zh-TW' ? 'Traditional Chinese (Taiwan)' : 'English';
 
   const userPrompt = `
-    TASK: Comprehensive Indie Film Appraisal
-    TITLE: "${project.title}"
+    INSTRUCTIONS: Perform a professional indie film focus group appraisal.
+    FILM: "${project.title}"
     SYNOPSIS: ${project.synopsis}
-    DIALOGUE_CONTEXT: ${project.srtContent.substring(0, 5000)}
+    CONTEXTUAL DIALOGUE: ${project.srtContent.substring(0, 5000)}
 
-    INSTRUCTIONS:
-    1. Provide an Executive Summary (approx 300-400 words).
-    2. List 10 specific timestamped highlights/lowlights based on visual and narrative cues.
-    3. Respond to these focus group objectives:
-    ${project.questions.map((q, i) => `${i+1}. ${q}`).join('\n')}
+    GOALS:
+    1. Executive critical summary (~300-500 words).
+    2. Detailed timestamped observations (10 points).
+    3. Direct responses to user-defined research objectives:
+    ${project.questions.map((q, i) => `Objective ${i+1}: ${q}`).join('\n')}
     
-    OUTPUT REQUIREMENTS:
+    CONSTRAINTS:
     - Respond strictly in ${langName}.
-    - Return ONLY a valid JSON object.
+    - Ensure output is structured as valid JSON.
   `;
 
   parts.push({ text: userPrompt });
 
   const systemInstruction = `
-    You are ${persona.name}, ${persona.role}. 
+    IDENTITY: You are ${persona.name}, ${persona.role}. 
     PROFILE: ${persona.description}
-    LENS: Acquisitions & Market Readiness.
-    STRICT: You must provide your analysis in ${langName}. No English unless requested or technical terms are untranslatable.
+    LENS: Acquisitions, pacing, and commercial viability.
+    LANGUAGE: You MUST communicate your entire report in ${langName}.
   `;
 
-  FocalPointDebug.log("API_REQUEST", { persona: persona.name, language: langName });
+  FocalPointLogger.info("API_Call", { persona: persona.name, model: modelName });
 
   try {
     const response = await ai.models.generateContent({
-      model,
+      model: modelName,
       contents: { parts },
       config: {
         systemInstruction,
@@ -166,14 +165,14 @@ export const generateAgentReport = async (
       }
     });
 
-    const result = extractJSON(response.text || "{}");
-    FocalPointDebug.log("API_SUCCESS", "Report generated and parsed successfully.");
+    const report = safeParseReport(response.text || "{}");
+    FocalPointLogger.info("API_Success", "Report synthesized and parsed.");
     return {
       personaId: persona.id,
-      ...result
+      ...report
     };
   } catch (error: any) {
-    FocalPointDebug.error("API_FAILURE", error);
-    throw new Error(`Report generation failed: ${error.message}`);
+    FocalPointLogger.error("API_Call", error);
+    throw new Error(`Screening failed: ${error.message}`);
   }
 };
