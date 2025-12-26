@@ -27,6 +27,14 @@ FocalPoint AI is a React + TypeScript + Vite application that provides advanced 
 - Vite proxies `/api` requests to the backend
 - API key is securely stored as GEMINI_API_KEY secret (never exposed to frontend)
 
+### Video Upload Flow
+1. Frontend uploads video file to `/api/upload` endpoint
+2. Backend uses multer to receive file, uploads to Gemini Files API
+3. Backend polls Gemini until video processing completes (up to 5 minutes)
+4. Frontend receives file URI, sends to `/api/analyze` with project metadata
+5. Backend uses `createPartFromUri` to reference video in Gemini request
+6. Maximum video size: 2GB (enforced on frontend and backend)
+
 ## Development
 - Run: `npm run dev` (starts both frontend and backend concurrently)
 - Frontend only: `vite`
