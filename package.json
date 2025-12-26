@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"tsx server/index.ts\" \"vite\"",
+    "dev": "concurrently -k \"tsx server/index.ts\" \"sleep 2 && vite\"",
     "server": "tsx server/index.ts",
     "build": "vite build",
     "start": "NODE_ENV=production tsx server/index.ts",

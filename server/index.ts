@@ -22,6 +22,10 @@ console.log('[FocalPoint] Configuring middleware...');
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: Date.now() });
+});
+
 const MAX_VIDEO_SIZE_MB = 2000;
 const MAX_VIDEO_SIZE_BYTES = MAX_VIDEO_SIZE_MB * 1024 * 1024;
 
