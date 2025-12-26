@@ -1,0 +1,119 @@
+1) Decide what “lowlight” means in your product
+
+Right now you’re implicitly using “lowlight” as “anything not great,” but users interpret it as “negative / risk / problem.”
+
+Pick one definition and enforce it:
+
+Definition A (recommended): Lowlight = risk, weakness, confusion, boredom, credibility gap, marketability blocker, craft issue.
+
+Definition B: Lowlight = lower emotional intensity / less memorable moment (can still be positive).
+If you want A, you must write that explicitly; otherwise the model will drift toward B.
+
+2) Enforce a rubric + severity score (so it can’t stay “nice”)
+
+Require each lowlight to include:
+
+Issue type (pacing / clarity / character / tone / audio / lighting / story logic / marketability)
+
+Severity (1–5)
+
+Why it matters (impact)
+
+Fix suggestion (optional but useful)
+
+Evidence (timestamp + quote)
+
+This makes it hard for the model to produce “lowlight: very nice scene!”
+
+3) Force a balanced ratio and minimum negativity
+
+If you want “real criticism,” you need a quota.
+
+Examples:
+
+“Return exactly 5 highlights and 5 lowlights.”
+
+“At least 3 lowlights must be severity ≥ 3.”
+
+“At least 2 lowlights must be marketability risks.”
+
+Without ratio constraints, the model will tend to “play safe.”
+
+4) Change the label in UI: “Concerns / Risks” works better than “Lowlight”
+
+“Lowlight” reads like a tone label; “Concerns” forces problem framing.
+
+Recommended UI:
+
+Highlights
+
+Concerns (with severity)
+
+Opportunities (optional; turns “concerns” into actions)
+
+If you must keep “lowlight,” add parenthetical: Lowlight (Issue/Risk).
+
+5) Use a strict JSON schema output and validate it
+
+Do not ask for free-form prose and then try to parse.
+
+Example schema
+{
+  "highlights": [
+    {
+      "timestamp": "MM:SS–MM:SS",
+      "summary": "...",
+      "why_it_works": "...",
+      "quote": "...",
+      "category": "emotion|craft|clarity|marketability"
+    }
+  ],
+  "lowlights": [
+    {
+      "timestamp": "MM:SS–MM:SS",
+      "issue": "...",
+      "impact": "...",
+      "severity": 1,
+      "category": "pacing|clarity|character|audio|visual|tone|marketability",
+      "suggested_fix": "...",
+      "quote": "..."
+    }
+  ]
+}
+
+
+Then validate:
+
+must have N items
+
+severity integer 1–5
+
+timestamps present
+
+lowlights must contain an “impact” that is actually negative
+
+6) Concrete prompt block you can drop in (recommended)
+
+Replace your vague section with something like:
+
+Highlights vs Lowlights Definition and Requirements
+
+HIGHLIGHT = moments that increase audience engagement, clarity, emotional impact, or commercial/festival appeal.
+
+LOWLIGHT = moments that reduce engagement or clarity, create confusion, feel slow, undermine credibility, or hurt marketability (e.g., pacing drag, unclear stakes, tonal mismatch, weak performance beat, audio/visual distraction, or narrative logic gap).
+
+Output constraints:
+
+Provide exactly 5 highlights and exactly 5 lowlights.
+
+Each lowlight must include: issue, impact, and severity (1–5) where 3 = meaningful problem.
+
+At least 3 lowlights must have severity ≥ 3.
+
+Do not soften criticism; write lowlights as a professional acquisitions/notes memo.
+
+Use timestamps and include a short quote or specific described moment as evidence.
+
+Return valid JSON only matching the schema.
+
+This single block usually fixes 80% of “too positive” behavior.

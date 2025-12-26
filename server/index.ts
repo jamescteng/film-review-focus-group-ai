@@ -362,19 +362,37 @@ app.post('/api/analyze', async (req, res) => {
 
       GOALS:
       1. Executive critical summary (~300-500 words).
-      2. Detailed timestamped observations (10 points).
+      2. Exactly 5 HIGHLIGHTS and exactly 5 CONCERNS (see definitions below).
       3. Direct responses to user-defined research objectives:
       ${questions.map((q, i) => `Objective ${i + 1}: ${q}`).join('\n')}
+
+      === HIGHLIGHTS vs CONCERNS DEFINITIONS ===
       
+      HIGHLIGHT = moments that increase audience engagement, clarity, emotional impact, or commercial/festival appeal.
+      For each highlight, explain WHY it works and categorize it (emotion, craft, clarity, or marketability).
+
+      CONCERN = moments that reduce engagement or clarity, create confusion, feel slow, undermine credibility, or hurt marketability.
+      Examples: pacing drag, unclear stakes, tonal mismatch, weak performance beat, audio/visual distraction, narrative logic gap.
+      
+      === CONCERN REQUIREMENTS ===
+      - Each concern MUST include: issue description, impact explanation, and severity (1-5 where 3 = meaningful problem).
+      - At least 3 concerns MUST have severity >= 3.
+      - Categorize each concern: pacing, clarity, character, audio, visual, tone, or marketability.
+      - Include a suggested fix for each concern.
+      - Do NOT soften criticism. Write concerns as a professional acquisitions/notes memo.
+      - Use timestamps and describe the specific moment as evidence.
+
       CONSTRAINTS:
       - Respond strictly in ${langName}.
       - Ensure output is structured as valid JSON.
+      - Return EXACTLY 5 highlights and EXACTLY 5 concerns.
     `;
 
     const systemInstruction = `
       IDENTITY: You are a Senior Acquisitions Director at a major independent film distribution company.
       LENS: Acquisitions, pacing, and commercial viability.
       LANGUAGE: You MUST communicate your entire report in ${langName}.
+      CRITICAL STANCE: You are known for your honest, no-nonsense assessments. You do not sugarcoat problems. When you identify a concern, you state it directly with its impact and severity. Your job is to help filmmakers improve their work, not to make them feel good.
     `;
 
     FocalPointLogger.info("API_Call", { model: modelName, fileUri });
@@ -401,10 +419,27 @@ app.post('/api/analyze', async (req, res) => {
                 properties: {
                   timestamp: { type: Type.STRING },
                   seconds: { type: Type.NUMBER },
-                  type: { type: Type.STRING, enum: ["highlight", "lowlight"] },
-                  comment: { type: Type.STRING }
+                  summary: { type: Type.STRING },
+                  why_it_works: { type: Type.STRING },
+                  category: { type: Type.STRING, enum: ["emotion", "craft", "clarity", "marketability"] }
                 },
-                required: ["timestamp", "seconds", "type", "comment"]
+                required: ["timestamp", "seconds", "summary", "why_it_works", "category"]
+              }
+            },
+            concerns: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  timestamp: { type: Type.STRING },
+                  seconds: { type: Type.NUMBER },
+                  issue: { type: Type.STRING },
+                  impact: { type: Type.STRING },
+                  severity: { type: Type.NUMBER },
+                  category: { type: Type.STRING, enum: ["pacing", "clarity", "character", "audio", "visual", "tone", "marketability"] },
+                  suggested_fix: { type: Type.STRING }
+                },
+                required: ["timestamp", "seconds", "issue", "impact", "severity", "category", "suggested_fix"]
               }
             },
             answers: {
@@ -419,7 +454,7 @@ app.post('/api/analyze', async (req, res) => {
               }
             }
           },
-          required: ["summary", "highlights", "answers"]
+          required: ["summary", "highlights", "concerns", "answers"]
         }
       }
     });
@@ -427,8 +462,67 @@ app.post('/api/analyze', async (req, res) => {
     const report = safeParseReport(response.text || "{}");
     FocalPointLogger.info("API_Success", "Report synthesized and parsed.");
 
+    const validationWarnings: string[] = [];
+    
+    if (!report.highlights || !Array.isArray(report.highlights)) {
+      report.highlights = [];
+      validationWarnings.push("Missing highlights array");
+    }
+    if (!report.concerns || !Array.isArray(report.concerns)) {
+      report.concerns = [];
+      validationWarnings.push("Missing concerns array");
+    }
+    
+    if (report.highlights.length !== 5) {
+      validationWarnings.push(`Expected 5 highlights, got ${report.highlights.length}`);
+    }
+    if (report.concerns.length !== 5) {
+      validationWarnings.push(`Expected 5 concerns, got ${report.concerns.length}`);
+    }
+    
+    let missingSeverityCount = 0;
+    let clampedSeverityCount = 0;
+    
+    const genuineHighSeverityCount = report.concerns.filter((c: any) => {
+      const s = c.severity;
+      return s !== undefined && s !== null && typeof s === 'number' && !isNaN(s) && s >= 3 && s <= 5;
+    }).length;
+    
+    report.concerns = report.concerns.map((c: any) => {
+      const rawSeverity = c.severity;
+      let validatedSeverity: number;
+      
+      if (rawSeverity === undefined || rawSeverity === null || typeof rawSeverity !== 'number' || isNaN(rawSeverity)) {
+        missingSeverityCount++;
+        validatedSeverity = 3;
+      } else if (rawSeverity < 1 || rawSeverity > 5) {
+        clampedSeverityCount++;
+        validatedSeverity = Math.max(1, Math.min(5, Math.round(rawSeverity)));
+      } else {
+        validatedSeverity = Math.round(rawSeverity);
+      }
+      
+      return { ...c, severity: validatedSeverity };
+    });
+    
+    if (missingSeverityCount > 0) {
+      validationWarnings.push(`${missingSeverityCount} concerns had missing/invalid severity (defaulted to 3)`);
+    }
+    if (clampedSeverityCount > 0) {
+      validationWarnings.push(`${clampedSeverityCount} concerns had severity outside 1-5 range (clamped)`);
+    }
+    
+    if (genuineHighSeverityCount < 3) {
+      validationWarnings.push(`Expected at least 3 concerns with genuine severity >= 3, got ${genuineHighSeverityCount}`);
+    }
+    
+    if (validationWarnings.length > 0) {
+      FocalPointLogger.warn("Validation", validationWarnings.join("; "));
+    }
+
     res.json({
       personaId: "acquisitions_director",
+      validationWarnings: validationWarnings.length > 0 ? validationWarnings : undefined,
       ...report
     });
 

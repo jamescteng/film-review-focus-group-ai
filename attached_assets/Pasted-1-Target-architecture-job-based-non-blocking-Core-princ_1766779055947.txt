@@ -1,0 +1,295 @@
+1) Target architecture: job-based, non-blocking
+Core principle
+
+Upload and processing are different phases and should be different jobs. Your HTTP request that accepts the upload should return quickly and never “wait”.
+
+Components
+
+API server (Node/Express)
+
+Object storage (recommended) OR local disk (POC only)
+
+Job queue (BullMQ + Redis is the fastest to ship; Cloud Tasks is also good)
+
+Worker (separate process) that calls Gemini File API + polls + runs inference
+
+DB for job/session state (Postgres recommended; SQLite for POC)
+
+Minimal data model
+
+jobs table:
+
+id (uuid)
+
+user_id
+
+status enum: CREATED | UPLOADING | UPLOADED | FILE_PROCESSING | FILE_ACTIVE | ANALYZING | COMPLETED | FAILED
+
+progress int (0–100)
+
+storage_uri (where the raw video sits, e.g. gs://… or s3://…)
+
+gemini_file_name (e.g. files/16tez2wbh2r9)
+
+gemini_state (PROCESSING|ACTIVE|FAILED)
+
+error_code, error_message
+
+created_at, updated_at
+
+2) Concrete production flow (non-blocking)
+Option A (best practice): upload directly to object storage (bypass your server for big payloads)
+Step-by-step
+
+1) Frontend requests upload session
+POST /api/uploads/init → returns:
+
+jobId
+
+a pre-signed upload URL (or resumable upload session URL) for object storage
+
+2) Frontend uploads video to storage
+
+Tus, S3 multipart, or GCS resumable
+
+Client uploads directly; your server is not in the data path
+
+3) Frontend notifies server upload finished
+POST /api/uploads/complete with { jobId, storageUri, size, mimeType }
+
+Server:
+
+sets job status UPLOADED
+
+enqueues a worker task: PROCESS_VIDEO(jobId)
+
+4) Worker does Gemini upload + processing wait
+Worker:
+
+reads from storage as stream
+
+calls Gemini File API resumable upload
+
+stores gemini_file_name
+
+polls Gemini file state until ACTIVE
+
+updates job progress/status as it proceeds
+
+5) Worker runs analysis
+
+call Gemini model with fileData: { fileUri: gemini_file_name }
+
+store results in DB
+
+mark job COMPLETED
+
+6) Frontend polls job status
+GET /api/jobs/:jobId → returns status + progress + results when ready.
+
+Why this is the right long-term pattern
+
+No backend memory pressure from uploads
+
+No Vite/proxy issues
+
+Easy retries and resumability
+
+Scales with large files and many concurrent users
+
+Option B (acceptable if you must upload via backend): keep your server in path but still non-blocking
+
+1) POST /api/upload streams to storage/disk
+
+returns quickly with jobId once upload is finalized
+
+do not wait for Gemini processing here
+
+2) Enqueue job
+
+after upload finalized: enqueue PROCESS_VIDEO(jobId) and return 202 Accepted
+
+3) Frontend polls GET /api/jobs/:jobId
+Same as above.
+
+Key requirement: Your upload handler must be streaming and cannot buffer.
+
+3) Concrete refactor plan (BullMQ + Redis example)
+New modules
+
+src/queue.ts (BullMQ queue + connection)
+
+src/workers/videoProcessor.ts
+
+src/routes/uploads.ts
+
+src/routes/jobs.ts
+
+src/services/geminiFiles.ts (upload + polling)
+
+src/services/geminiInference.ts (analysis call)
+
+src/db/jobsRepo.ts
+
+New endpoints
+
+POST /api/uploads/init
+
+POST /api/uploads/complete (or your current upload endpoint returns jobId)
+
+GET /api/jobs/:jobId
+
+Optional: GET /api/jobs/:jobId/events (SSE) for real-time updates
+
+Job states (the “truth” of the system)
+
+UPLOADED means raw file exists somewhere stable
+
+FILE_PROCESSING means Gemini file exists but not active
+
+FILE_ACTIVE means safe to do inference
+
+ANALYZING means model call in progress
+
+This cleanly separates responsibilities and makes debugging trivial.
+
+4) Gemini polling and quota tuning (scale)
+4.1 Polling strategy: exponential backoff + jitter (recommended)
+
+Instead of fixed “60 tries”, implement:
+
+Start delay: 1s
+
+Backoff factor: 1.5
+
+Max delay: 10s
+
+Add jitter: ±20%
+
+Hard timeout: 5–10 minutes depending on expected video sizes
+
+Pseudo:
+
+attempt 1: 1s
+
+2: 1.5s
+
+3: 2.2s
+
+4: 3.3s
+
+…
+
+cap at 10s
+
+This reduces API calls per upload and improves reliability under load.
+
+4.2 Global concurrency limits (avoid quota spikes)
+
+You need two separate rate controls:
+
+A) Upload concurrency
+
+Limit number of parallel Gemini uploads (e.g. 2–5 per worker instance).
+
+B) Poll concurrency
+
+Polling calls are lightweight but can stampede.
+Use a shared limiter per project (e.g. Bottleneck in Node) and cap QPS.
+
+Concrete starting point:
+
+maxConcurrentGeminiUploads = 2
+
+maxConcurrentGeminiPolls = 10
+
+pollQPS = 5–10 total across your system (depending on quota)
+
+4.3 Idempotency + resume
+
+Store gemini_file_name once created.
+If worker crashes, it restarts and continues polling using stored file name rather than re-uploading.
+
+4.4 Deduplicate processing
+
+If the same file is uploaded twice (same hash), you can reuse the same Gemini file or reuse the same analysis results (depending on your product logic). At minimum:
+
+compute sha256 of the source (storage-level metadata)
+
+if job with same hash already processed, reuse.
+
+5) Reliability patterns your dev should implement
+5.1 Clear retry rules (do not “retry everything”)
+
+Retries should apply to:
+
+network timeouts
+
+429 / quota-related responses
+
+5xx transient errors
+
+Do NOT blindly retry:
+
+4xx validation errors
+
+file processing FAILED states (surface and stop)
+
+5.2 Worker crash safety
+
+Use:
+
+“at least once” jobs with idempotent steps
+
+store progress updates frequently
+
+persist gemini_file_name immediately after upload finalize
+
+5.3 Timeouts
+
+Set explicit timeouts:
+
+upload step timeout (e.g. 15 min depending on size)
+
+processing wait timeout (e.g. 10 min)
+
+analysis timeout (e.g. 2–5 min)
+
+5.4 Observability
+
+At minimum log:
+
+jobId
+
+userId
+
+fileSize
+
+chunk size
+
+Gemini file id
+
+processing time distribution
+
+poll attempts and final state
+
+Later: add structured logs (JSON) + OpenTelemetry.
+
+6) UX/API: polling vs SSE (better than polling)
+Polling approach (simple)
+
+Frontend:
+
+call GET /api/jobs/:jobId every 1–2 seconds early, then slower
+
+SSE approach (better)
+
+Backend:
+
+GET /api/jobs/:jobId/events keeps a stream open
+
+server pushes status/progress updates
+
+reduces API load significantly and feels real-time
+
+If you want fast shipping: implement polling now; add SSE later.

@@ -23,17 +23,33 @@ FocalPoint AI is a React + TypeScript + Vite application that provides advanced 
 
 ## Architecture
 - Frontend runs on port 5000 (Vite dev server)
-- Backend runs on port 3001 (Express server)
+- Backend runs on port 3001 (Express server), binds to 0.0.0.0
 - Vite proxies `/api` requests to the backend
 - API key is securely stored as GEMINI_API_KEY secret (never exposed to frontend)
+- express.json() middleware bypassed for /api/upload route to prevent memory buffering
 
 ### Video Upload Flow
 1. Frontend uploads video file to `/api/upload` endpoint
-2. Backend uses multer to receive file, uploads to Gemini Files API
-3. Backend polls Gemini until video processing completes (up to 5 minutes)
-4. Frontend receives file URI, sends to `/api/analyze` with project metadata
-5. Backend uses `createPartFromUri` to reference video in Gemini request
-6. Maximum video size: 2GB (enforced on frontend and backend)
+2. Backend uses multer to save file to disk (not memory)
+3. Backend streams file to Gemini in 16MB chunks using resumable upload protocol
+4. Backend polls Gemini until video processing completes (up to 5 minutes)
+5. Frontend receives file URI, sends to `/api/analyze` with project metadata
+6. Backend uses `createPartFromUri` to reference video in Gemini request
+7. Maximum video size: 2GB (enforced on frontend and backend)
+
+### Analysis Response Schema
+The `/api/analyze` endpoint returns a structured report with:
+- `summary`: Executive critical summary (300-500 words)
+- `highlights`: Array of 5 positive moments with:
+  - timestamp, seconds, summary, why_it_works, category (emotion/craft/clarity/marketability)
+- `concerns`: Array of 5 critical issues with:
+  - timestamp, seconds, issue, impact, severity (1-5), category, suggested_fix
+- `answers`: Responses to user-defined research objectives
+
+Server-side validation enforces:
+- Exactly 5 highlights and 5 concerns expected (logs warning if violated)
+- Severity clamped to 1-5 range
+- At least 3 concerns should have severity >= 3
 
 ## Development
 - Run: `npm run dev` (starts both frontend and backend concurrently)
@@ -46,3 +62,11 @@ FocalPoint AI is a React + TypeScript + Vite application that provides advanced 
 
 ## Deployment
 Autoscale deployment - builds frontend with Vite, serves via Express backend.
+
+## Recent Changes
+- Implemented resumable upload with 16MB chunks and offset reconciliation
+- Fixed server binding to 0.0.0.0 for reliable Vite proxy connection
+- Bypassed express.json() for upload route to prevent memory buffering
+- Added memory logging and graceful shutdown handlers
+- Separated highlights/concerns with explicit rubric and severity scoring
+- Added server-side validation for response schema

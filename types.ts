@@ -18,8 +18,19 @@ export interface Persona {
 export interface Highlight {
   timestamp: string;
   seconds: number;
-  type: 'highlight' | 'lowlight';
-  comment: string;
+  summary: string;
+  why_it_works: string;
+  category: 'emotion' | 'craft' | 'clarity' | 'marketability';
+}
+
+export interface Concern {
+  timestamp: string;
+  seconds: number;
+  issue: string;
+  impact: string;
+  severity: number;
+  category: 'pacing' | 'clarity' | 'character' | 'audio' | 'visual' | 'tone' | 'marketability';
+  suggested_fix: string;
 }
 
 export interface QuestionAnswer {
@@ -31,7 +42,9 @@ export interface AgentReport {
   personaId: string;
   summary: string;
   highlights: Highlight[];
+  concerns: Concern[];
   answers: QuestionAnswer[];
+  validationWarnings?: string[];
 }
 
 export interface Project {
