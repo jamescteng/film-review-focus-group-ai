@@ -1,11 +1,10 @@
-
 import React, { useState } from 'react';
 import { AppState, Project, AgentReport } from './types';
 import { PERSONAS } from './constants.tsx';
 import { UploadForm } from './components/UploadForm';
 import { ProcessingQueue } from './components/ProcessingQueue';
 import { ScreeningRoom } from './components/ScreeningRoom';
-import { generateAgentReport, uploadVideo, UploadResult } from './geminiService';
+import { generateAgentReports, uploadVideo, UploadResult } from './geminiService';
 
 const App: React.FC = () => {
   const [state, setState] = useState<AppState>(AppState.IDLE);
@@ -45,13 +44,22 @@ const App: React.FC = () => {
       return;
     }
 
-    const persona = PERSONAS[0];
-    setStatusMessage(isZH ? `正在執行深度分析: ${p.title}...` : `Running deep appraisal on ${p.title}...`);
+    const personaCount = p.selectedPersonaIds.length;
+    const personaNames = p.selectedPersonaIds.map(id => {
+      const persona = PERSONAS.find(p => p.id === id);
+      return persona?.name || id;
+    }).join(', ');
+
+    setStatusMessage(
+      isZH 
+        ? `正在執行深度分析 (${personaCount} 位評審): ${p.title}...` 
+        : `Running deep appraisal with ${personaCount} reviewer${personaCount > 1 ? 's' : ''} (${personaNames})...`
+    );
     setProcessProgress(60);
     
     try {
-      const report = await generateAgentReport(persona, p, uploadResult);
-      setReports([report]);
+      const reportResults = await generateAgentReports(p, uploadResult);
+      setReports(reportResults);
       setProcessProgress(100);
       setTimeout(() => setState(AppState.VIEWING), 600);
     } catch (err: any) {
@@ -60,6 +68,10 @@ const App: React.FC = () => {
       setState(AppState.IDLE);
     }
   };
+
+  const selectedPersonas = project 
+    ? PERSONAS.filter(p => project.selectedPersonaIds.includes(p.id))
+    : PERSONAS.slice(0, 1);
 
   return (
     <div className="min-h-screen bg-[#fdfdfd] text-slate-900 selection:bg-slate-900 selection:text-white font-sans overflow-x-hidden">
@@ -87,7 +99,7 @@ const App: React.FC = () => {
         {state === AppState.ANALYZING && project && (
           <div className="flex flex-col items-center">
             <ProcessingQueue 
-              personas={PERSONAS} 
+              personas={selectedPersonas} 
               currentIndex={0} 
               progress={processProgress}
             />
@@ -102,7 +114,6 @@ const App: React.FC = () => {
         )}
       </div>
 
-      {/* Aesthetic Background Elements */}
       <div className="fixed inset-0 pointer-events-none -z-10 opacity-30">
         <div className="absolute top-0 right-0 w-[80vw] h-[80vh] bg-slate-100 rounded-full blur-[200px]" />
         <div className="absolute bottom-0 left-0 w-[50vw] h-[50vh] bg-blue-50/50 rounded-full blur-[200px]" />

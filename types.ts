@@ -20,7 +20,7 @@ export interface Highlight {
   seconds: number;
   summary: string;
   why_it_works: string;
-  category: 'emotion' | 'craft' | 'clarity' | 'marketability';
+  category: string;
 }
 
 export interface Concern {
@@ -29,7 +29,7 @@ export interface Concern {
   issue: string;
   impact: string;
   severity: number;
-  category: 'pacing' | 'clarity' | 'character' | 'audio' | 'visual' | 'tone' | 'marketability';
+  category: string;
   suggested_fix: string;
 }
 
@@ -56,6 +56,7 @@ export interface Project {
   videoFile?: File;
   questions: string[];
   language: 'en' | 'zh-TW';
+  selectedPersonaIds: string[];
 }
 
 export enum AppState {

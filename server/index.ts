@@ -8,6 +8,7 @@ import os from 'os';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
 import { GoogleGenAI, Type, createPartFromUri } from "@google/genai";
+import { getPersonaById, getAllPersonas, PersonaConfig } from './personas.js';
 
 console.log('[FocalPoint] All imports successful');
 
@@ -80,6 +81,7 @@ interface AnalyzeRequest {
   language: 'en' | 'zh-TW';
   fileUri: string;
   fileMimeType: string;
+  personaIds: string[];
 }
 
 const FocalPointLogger = {
@@ -375,112 +377,51 @@ app.post('/api/upload', upload.single('video'), handleMulterError, async (req, r
   }
 });
 
-app.post('/api/analyze', async (req, res) => {
+app.get('/api/personas', (req, res) => {
+  const personas = getAllPersonas().map(p => ({
+    id: p.id,
+    name: p.name,
+    role: p.role,
+    avatar: p.avatar,
+    demographics: p.demographics,
+    highlightCategories: p.highlightCategories,
+    concernCategories: p.concernCategories
+  }));
+  res.json(personas);
+});
+
+async function analyzeWithPersona(
+  ai: any,
+  persona: PersonaConfig,
+  params: {
+    title: string;
+    synopsis: string;
+    srtContent: string;
+    questions: string[];
+    langName: string;
+    fileUri: string;
+    fileMimeType: string;
+  }
+): Promise<{ personaId: string; status: 'success' | 'error'; report?: any; error?: string; validationWarnings?: string[] }> {
+  const modelName = "gemini-3-flash-preview";
+  
   try {
-    const { title, synopsis, srtContent, questions, language, fileUri, fileMimeType } = req.body as AnalyzeRequest;
+    const systemInstruction = persona.systemInstruction(params.langName);
+    const userPrompt = persona.userPrompt({
+      title: params.title,
+      synopsis: params.synopsis,
+      srtContent: params.srtContent,
+      questions: params.questions,
+      langName: params.langName
+    });
 
-    const ai = getAI();
-
-    if (!title || !title.trim()) {
-      return res.status(400).json({ error: "Invalid project metadata: title is required." });
-    }
-
-    if (!fileUri) {
-      return res.status(400).json({ error: "Video file URI is required. Please upload a video first." });
-    }
-
-    const modelName = "gemini-3-flash-preview";
-    const langName = language === 'zh-TW' ? 'Traditional Chinese (Taiwan)' : 'English';
-
-    const userPrompt = `
-INSTRUCTIONS: Perform a professional indie film focus group appraisal from an acquisitions perspective.
-
-FILM: "${title}"
-SYNOPSIS: ${synopsis}
-CONTEXTUAL DIALOGUE: ${srtContent.substring(0, 5000)}
-
-GOALS
-
-Executive critical summary (300–500 words).
-
-Write this as an internal acquisitions decision memo.
-
-Prioritize risks, weaknesses, and decision-relevant issues over compliments.
-
-Assume the reader has limited time and is evaluating whether to proceed.
-
-Exactly 5 HIGHLIGHTS and exactly 5 CONCERNS (see definitions below).
-
-Direct responses to user-defined research objectives:
-${questions.map((q, i) => `Objective ${i + 1}: ${q}`).join('\n')}
-
-=== HIGHLIGHTS vs CONCERNS DEFINITIONS ===
-
-HIGHLIGHT
-Moments that clearly increase audience engagement, clarity, emotional impact, or commercial/festival appeal.
-For each highlight, explain WHY it works and categorize it as one of the following:
-emotion, craft, clarity, or marketability.
-
-CONCERN
-Moments that clearly reduce engagement or clarity, create confusion, feel slow, undermine credibility, or hurt marketability.
-
-Examples include (but are not limited to):
-pacing drag, unclear stakes, tonal mismatch, weak performance beats, audio/visual distractions, or narrative logic gaps.
-
-=== CONCERN REQUIREMENTS (STRICT) ===
-
-Each concern MUST include:
-
-A clear issue description
-
-A clear impact explanation (explicitly state what the audience or buyer loses: attention, clarity, trust, emotional investment, or sales potential)
-
-A severity score from 1–5 (where 3 = a meaningful problem)
-
-At least 3 concerns MUST have severity ≥ 3
-
-Categorize each concern as one of the following:
-pacing, clarity, character, audio, visual, tone, or marketability
-
-Include a suggested fix for each concern
-
-Use timestamps and describe the specific moment as evidence
-
-Do NOT soften criticism.
-
-Avoid hedging language such as "might," "could," "may," "some viewers," or "slightly."
-
-Do NOT balance concerns with praise. A concern should describe only the problem and its consequences.
-
-Write concerns as professional internal acquisitions notes, not marketing copy.
-
-CONSTRAINTS
-
-Respond strictly in ${langName}.
-
-Ensure the output is structured as valid JSON only.
-
-Return EXACTLY 5 highlights and EXACTLY 5 concerns.
-
-Do not include any explanatory text outside the JSON structure.
-    `;
-
-    const systemInstruction = `
-IDENTITY: You are a Senior Acquisitions Director at a major independent film distribution company.
-LENS: Acquisitions decision-making, pacing, and commercial viability.
-LANGUAGE: You MUST communicate your entire report in ${langName}.
-
-CRITICAL STANCE:
-You are known for your honest, no-nonsense assessments. You do not sugarcoat problems or balance criticism with praise. When you identify a concern, you state it directly, explain its impact, and assess its severity. Your job is to help filmmakers improve their work and to inform acquisition decisions—not to make them feel good.
-    `;
-
-    FocalPointLogger.info("API_Call", { model: modelName, fileUri });
+    FocalPointLogger.info("API_Call", { model: modelName, persona: persona.id, fileUri: params.fileUri });
 
     const response = await ai.models.generateContent({
       model: modelName,
       contents: {
         parts: [
-          createPartFromUri(fileUri, fileMimeType || 'video/mp4'),
+          createPartFromUri(params.fileUri, params.fileMimeType || 'video/mp4'),
           { text: userPrompt }
         ]
       },
@@ -500,7 +441,7 @@ You are known for your honest, no-nonsense assessments. You do not sugarcoat pro
                   seconds: { type: Type.NUMBER },
                   summary: { type: Type.STRING },
                   why_it_works: { type: Type.STRING },
-                  category: { type: Type.STRING, enum: ["emotion", "craft", "clarity", "marketability"] }
+                  category: { type: Type.STRING, enum: persona.highlightCategories }
                 },
                 required: ["timestamp", "seconds", "summary", "why_it_works", "category"]
               }
@@ -515,7 +456,7 @@ You are known for your honest, no-nonsense assessments. You do not sugarcoat pro
                   issue: { type: Type.STRING },
                   impact: { type: Type.STRING },
                   severity: { type: Type.NUMBER },
-                  category: { type: Type.STRING, enum: ["pacing", "clarity", "character", "audio", "visual", "tone", "marketability"] },
+                  category: { type: Type.STRING, enum: persona.concernCategories },
                   suggested_fix: { type: Type.STRING }
                 },
                 required: ["timestamp", "seconds", "issue", "impact", "severity", "category", "suggested_fix"]
@@ -539,7 +480,7 @@ You are known for your honest, no-nonsense assessments. You do not sugarcoat pro
     });
 
     const report = safeParseReport(response.text || "{}");
-    FocalPointLogger.info("API_Success", "Report synthesized and parsed.");
+    FocalPointLogger.info("API_Success", { persona: persona.id });
 
     const validationWarnings: string[] = [];
     
@@ -591,19 +532,80 @@ You are known for your honest, no-nonsense assessments. You do not sugarcoat pro
       validationWarnings.push(`${clampedSeverityCount} concerns had severity outside 1-5 range (clamped)`);
     }
     
-    if (genuineHighSeverityCount < 3) {
-      validationWarnings.push(`Expected at least 3 concerns with genuine severity >= 3, got ${genuineHighSeverityCount}`);
+    if (genuineHighSeverityCount < persona.minHighSeverityConcerns) {
+      validationWarnings.push(`Expected at least ${persona.minHighSeverityConcerns} concerns with severity >= 3, got ${genuineHighSeverityCount}`);
     }
     
     if (validationWarnings.length > 0) {
-      FocalPointLogger.warn("Validation", validationWarnings.join("; "));
+      FocalPointLogger.warn("Validation", `[${persona.id}] ${validationWarnings.join("; ")}`);
     }
 
-    res.json({
-      personaId: "acquisitions_director",
-      validationWarnings: validationWarnings.length > 0 ? validationWarnings : undefined,
-      ...report
+    return {
+      personaId: persona.id,
+      status: 'success',
+      report: {
+        executive_summary: report.executive_summary,
+        highlights: report.highlights,
+        concerns: report.concerns,
+        answers: report.answers
+      },
+      validationWarnings: validationWarnings.length > 0 ? validationWarnings : undefined
+    };
+  } catch (error: any) {
+    FocalPointLogger.error("API_Call", `[${persona.id}] ${error.message}`);
+    return {
+      personaId: persona.id,
+      status: 'error' as const,
+      error: error.message
+    };
+  }
+}
+
+app.post('/api/analyze', async (req, res) => {
+  try {
+    const { title, synopsis, srtContent, questions, language, fileUri, fileMimeType, personaIds } = req.body as AnalyzeRequest;
+
+    const ai = getAI();
+
+    if (!title || !title.trim()) {
+      return res.status(400).json({ error: "Invalid project metadata: title is required." });
+    }
+
+    if (!fileUri) {
+      return res.status(400).json({ error: "Video file URI is required. Please upload a video first." });
+    }
+
+    const selectedPersonaIds = personaIds && personaIds.length > 0 ? personaIds : ['acquisitions_director'];
+    const personas = selectedPersonaIds.map(id => getPersonaById(id)).filter((p): p is PersonaConfig => p !== undefined);
+
+    if (personas.length === 0) {
+      return res.status(400).json({ error: "No valid personas selected." });
+    }
+
+    const langName = language === 'zh-TW' ? 'Traditional Chinese (Taiwan)' : 'English';
+
+    FocalPointLogger.info("Analysis_Start", { personas: personas.map(p => p.id), fileUri });
+
+    const results = await Promise.all(
+      personas.map(persona => 
+        analyzeWithPersona(ai, persona, {
+          title,
+          synopsis,
+          srtContent,
+          questions,
+          langName,
+          fileUri,
+          fileMimeType
+        })
+      )
+    );
+
+    FocalPointLogger.info("Analysis_Complete", { 
+      total: results.length, 
+      successful: results.filter(r => r.status === 'success').length 
     });
+
+    res.json({ results });
 
   } catch (error: any) {
     FocalPointLogger.error("API_Call", error);

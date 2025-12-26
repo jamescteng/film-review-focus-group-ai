@@ -15,6 +15,23 @@ export interface UploadResult {
   fileName: string;
 }
 
+export interface PersonaResult {
+  personaId: string;
+  status: 'success' | 'error';
+  report?: {
+    executive_summary: string;
+    highlights: any[];
+    concerns: any[];
+    answers: any[];
+  };
+  error?: string;
+  validationWarnings?: string[];
+}
+
+export interface AnalyzeResponse {
+  results: PersonaResult[];
+}
+
 export const uploadVideo = async (
   file: File,
   onProgress?: (progress: number) => void
@@ -51,11 +68,10 @@ export const uploadVideo = async (
   return result;
 };
 
-export const generateAgentReport = async (
-  persona: Persona,
+export const generateAgentReports = async (
   project: Project,
   uploadResult: UploadResult
-): Promise<AgentReport> => {
+): Promise<AgentReport[]> => {
   if (!project.title || project.title.trim().length === 0) {
     throw new Error("DATA_ERR_01: Invalid Project Metadata.");
   }
@@ -64,7 +80,11 @@ export const generateAgentReport = async (
     throw new Error("DATA_ERR_02: Video must be uploaded first.");
   }
 
-  FocalPointLogger.info("API_Call", { persona: persona.name, fileUri: uploadResult.fileUri });
+  const personaIds = project.selectedPersonaIds && project.selectedPersonaIds.length > 0 
+    ? project.selectedPersonaIds 
+    : ['acquisitions_director'];
+
+  FocalPointLogger.info("API_Call", { personas: personaIds, fileUri: uploadResult.fileUri });
 
   try {
     const response = await fetch('/api/analyze', {
@@ -79,7 +99,8 @@ export const generateAgentReport = async (
         questions: project.questions,
         language: project.language,
         fileUri: uploadResult.fileUri,
-        fileMimeType: uploadResult.fileMimeType
+        fileMimeType: uploadResult.fileMimeType,
+        personaIds
       })
     });
 
@@ -88,9 +109,26 @@ export const generateAgentReport = async (
       throw new Error(errorData.error || `Server error: ${response.status}`);
     }
 
-    const report = await response.json();
-    FocalPointLogger.info("API_Success", "Report synthesized and parsed.");
-    return report;
+    const data: AnalyzeResponse = await response.json();
+    FocalPointLogger.info("API_Success", `Received ${data.results.length} persona reports`);
+    
+    const reports: AgentReport[] = data.results
+      .filter(r => r.status === 'success' && r.report)
+      .map(r => ({
+        personaId: r.personaId,
+        executive_summary: r.report!.executive_summary,
+        highlights: r.report!.highlights,
+        concerns: r.report!.concerns,
+        answers: r.report!.answers,
+        validationWarnings: r.validationWarnings
+      }));
+
+    if (reports.length === 0) {
+      const errors = data.results.filter(r => r.status === 'error').map(r => r.error).join('; ');
+      throw new Error(`All persona analyses failed: ${errors}`);
+    }
+
+    return reports;
   } catch (error: any) {
     FocalPointLogger.error("API_Call", error);
     throw new Error(`Screening failed: ${error.message}`);

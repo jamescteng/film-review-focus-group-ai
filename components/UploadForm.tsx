@@ -1,8 +1,7 @@
-
 import React, { useState } from 'react';
 import { Button } from './Button';
 import { Project } from '../types';
-import { INITIAL_QUESTIONS } from '../constants.tsx';
+import { INITIAL_QUESTIONS, PERSONAS } from '../constants.tsx';
 
 interface UploadFormProps {
   onStart: (project: Project) => void;
@@ -15,10 +14,12 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onStart }) => {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [language, setLanguage] = useState<'en' | 'zh-TW'>('en');
   const [questions, setQuestions] = useState<string[]>(INITIAL_QUESTIONS);
+  const [selectedPersonaIds, setSelectedPersonaIds] = useState<string[]>(['acquisitions_director']);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!videoFile) return;
+    if (selectedPersonaIds.length === 0) return;
 
     onStart({
       id: Math.random().toString(36).substr(2, 9),
@@ -28,8 +29,17 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onStart }) => {
       videoFile,
       videoUrl: URL.createObjectURL(videoFile),
       questions,
-      language
+      language,
+      selectedPersonaIds
     });
+  };
+
+  const togglePersona = (personaId: string) => {
+    setSelectedPersonaIds(prev => 
+      prev.includes(personaId)
+        ? prev.filter(id => id !== personaId)
+        : [...prev, personaId]
+    );
   };
 
   const addQuestion = () => setQuestions([...questions, ""]);
@@ -53,7 +63,6 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onStart }) => {
 
       <form onSubmit={handleSubmit} className="space-y-16 bg-white p-8 md:p-16 rounded-[3rem] border border-slate-200 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.06)]">
         
-        {/* Project Details */}
         <div className="space-y-8">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="flex items-center gap-3">
@@ -88,7 +97,6 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onStart }) => {
           />
         </div>
 
-        {/* Media Uploads */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
           <div className="space-y-6">
             <div className="flex items-center gap-3">
@@ -143,7 +151,6 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onStart }) => {
           </div>
         </div>
 
-        {/* Narrative Context */}
         <div className="space-y-6">
           <div className="flex items-center gap-3">
             <span className="text-sm font-black bg-slate-900 text-white px-3 py-1 rounded-lg">04</span>
@@ -158,12 +165,60 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onStart }) => {
           />
         </div>
 
-        {/* Evaluation Goals */}
+        <div className="space-y-8">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-black bg-slate-900 text-white px-3 py-1 rounded-lg">05</span>
+            <label className="text-sm font-bold uppercase tracking-[0.2em] text-slate-900">Select Reviewers</label>
+          </div>
+          <p className="text-slate-500 text-sm -mt-4">Choose one or more professional perspectives for your focus group. Each reviewer adds an API call.</p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {PERSONAS.map((persona) => {
+              const isSelected = selectedPersonaIds.includes(persona.id);
+              return (
+                <button
+                  key={persona.id}
+                  type="button"
+                  onClick={() => togglePersona(persona.id)}
+                  className={`flex items-start gap-4 p-6 rounded-2xl border-2 transition-all text-left ${
+                    isSelected
+                      ? 'border-slate-900 bg-slate-50'
+                      : 'border-slate-200 bg-white hover:border-slate-400'
+                  }`}
+                >
+                  <img
+                    src={persona.avatar}
+                    alt={persona.name}
+                    className={`w-14 h-14 rounded-xl object-cover ${isSelected ? '' : 'opacity-60'}`}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-bold text-slate-900">{persona.name}</span>
+                      {isSelected && (
+                        <span className="w-5 h-5 bg-slate-900 rounded-full flex items-center justify-center">
+                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                          </svg>
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 font-medium">{persona.role}</p>
+                    <p className="text-xs text-slate-400 mt-2 line-clamp-2">{persona.description}</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          {selectedPersonaIds.length === 0 && (
+            <p className="text-rose-500 text-sm">Please select at least one reviewer.</p>
+          )}
+        </div>
+
         <div className="space-y-8">
           <div className="flex justify-between items-end">
             <div className="space-y-1">
               <div className="flex items-center gap-3">
-                <span className="text-sm font-black bg-slate-900 text-white px-3 py-1 rounded-lg">05</span>
+                <span className="text-sm font-black bg-slate-900 text-white px-3 py-1 rounded-lg">06</span>
                 <label className="text-sm font-bold uppercase tracking-[0.2em] text-slate-900">Evaluation Objectives</label>
               </div>
             </div>
@@ -190,7 +245,12 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onStart }) => {
         </div>
 
         <div className="pt-8">
-          <Button type="submit" className="w-full py-10 rounded-[2.5rem] text-3xl font-serif italic shadow-2xl hover:translate-y-[-4px]" size="lg">
+          <Button 
+            type="submit" 
+            className="w-full py-10 rounded-[2.5rem] text-3xl font-serif italic shadow-2xl hover:translate-y-[-4px]" 
+            size="lg"
+            disabled={selectedPersonaIds.length === 0}
+          >
             Begin Professional Appraisal
           </Button>
         </div>

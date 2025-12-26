@@ -1,6 +1,5 @@
-
 import React, { useState, useRef } from 'react';
-import { Project, AgentReport, Persona } from '../types';
+import { Project, AgentReport } from '../types';
 import { PERSONAS } from '../constants.tsx';
 import { Button } from './Button';
 
@@ -26,7 +25,12 @@ const getCategoryIcon = (category: string) => {
     character: '👤',
     audio: '🔊',
     visual: '👁️',
-    tone: '🎭'
+    tone: '🎭',
+    authorship: '✨',
+    cultural_relevance: '🌍',
+    emotional_distance: '💔',
+    originality: '🎯',
+    cultural_resonance: '🌐'
   };
   return icons[category] || '📌';
 };
@@ -34,8 +38,10 @@ const getCategoryIcon = (category: string) => {
 export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({ project, reports }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [activeTab, setActiveTab] = useState<'highlights' | 'concerns'>('highlights');
-  const activeReport = reports[0];
-  const activePersona = PERSONAS[0];
+  const [activeReportIndex, setActiveReportIndex] = useState(0);
+  
+  const activeReport = reports[activeReportIndex];
+  const activePersona = PERSONAS.find(p => p.id === activeReport?.personaId) || PERSONAS[0];
 
   const seekTo = (seconds: number) => {
     if (videoRef.current) {
@@ -55,11 +61,41 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({ project, reports }
           <h2 className="text-3xl font-serif text-slate-900 tracking-tight">{project.title}</h2>
           <div className="flex items-center gap-3 mt-1">
             <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-            <p className="text-[10px] text-slate-400 uppercase tracking-[0.2em] font-bold">Appraisal Finalized</p>
+            <p className="text-[10px] text-slate-400 uppercase tracking-[0.2em] font-bold">
+              Appraisal Finalized • {reports.length} Reviewer{reports.length > 1 ? 's' : ''}
+            </p>
           </div>
         </div>
         <Button variant="outline" size="md" className="rounded-full px-8 border-slate-200" onClick={() => window.location.reload()}>New Screening</Button>
       </header>
+
+      {reports.length > 1 && (
+        <div className="border-b border-slate-100 px-8 py-4 bg-white flex gap-3 overflow-x-auto">
+          {reports.map((report, index) => {
+            const persona = PERSONAS.find(p => p.id === report.personaId);
+            if (!persona) return null;
+            const isActive = index === activeReportIndex;
+            return (
+              <button
+                key={report.personaId}
+                onClick={() => setActiveReportIndex(index)}
+                className={`flex items-center gap-3 px-5 py-3 rounded-full transition-all whitespace-nowrap ${
+                  isActive
+                    ? 'bg-slate-900 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <img
+                  src={persona.avatar}
+                  alt={persona.name}
+                  className="w-8 h-8 rounded-full object-cover"
+                />
+                <span className="font-bold text-sm">{persona.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <main className="flex-1 grid grid-cols-1 xl:grid-cols-12">
         <div className="xl:col-span-8 p-8 md:p-12 lg:p-16 overflow-y-auto space-y-20 border-r border-slate-100">
@@ -113,7 +149,7 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({ project, reports }
                     <div className="flex items-center justify-between mb-4">
                       <span className="text-xs font-bold px-4 py-1.5 bg-slate-900 text-white rounded-full">{h.timestamp}</span>
                       <span className="px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 flex items-center gap-1.5">
-                        {getCategoryIcon(h.category)} {h.category}
+                        {getCategoryIcon(h.category)} {h.category.replace('_', ' ')}
                       </span>
                     </div>
                     <p className="text-lg text-slate-800 leading-relaxed font-medium mb-3">{h.summary}</p>
@@ -135,7 +171,7 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({ project, reports }
                       <div className="flex items-center gap-3">
                         <span className="text-xs font-bold px-4 py-1.5 bg-slate-900 text-white rounded-full">{c.timestamp}</span>
                         <span className="px-3 py-1.5 rounded-full text-xs font-bold bg-slate-100 text-slate-600 flex items-center gap-1.5">
-                          {getCategoryIcon(c.category)} {c.category}
+                          {getCategoryIcon(c.category)} {c.category.replace('_', ' ')}
                         </span>
                       </div>
                       <span className={`px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider border ${getSeverityColor(c.severity)}`}>
@@ -157,7 +193,7 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({ project, reports }
           <section className="bg-slate-50 p-12 md:p-16 rounded-[3.5rem] border border-slate-100">
             <h3 className="text-2xl font-serif text-slate-900 mb-10 border-b border-slate-200 pb-8">Executive Summary</h3>
             <div className="max-w-none text-slate-700 leading-[2.1] text-xl font-light">
-              {(activeReport.executive_summary || (activeReport as any).summary || '').split('\n').map((para, i) => <p key={i} className="mb-8">{para}</p>)}
+              {(activeReport.executive_summary || '').split('\n').map((para, i) => <p key={i} className="mb-8">{para}</p>)}
             </div>
           </section>
         </div>

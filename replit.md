@@ -1,7 +1,7 @@
 # FocalPoint AI
 
 ## Overview
-FocalPoint AI is a React + TypeScript + Vite application that provides advanced multimodal focus groups for professional indie creators. It uses Google's Gemini AI to analyze video content.
+FocalPoint AI is a React + TypeScript + Vite application that provides advanced multimodal focus groups for professional indie creators. It uses Google's Gemini AI to analyze video content through multiple configurable personas, each offering a distinct professional perspective.
 
 ## Project Structure
 - `/App.tsx` - Main application component
@@ -10,8 +10,9 @@ FocalPoint AI is a React + TypeScript + Vite application that provides advanced 
 - `/components/` - React components (Button, UploadForm, ProcessingQueue, ScreeningRoom)
 - `/geminiService.ts` - Frontend service that calls the backend API
 - `/server/index.ts` - Express backend server with Gemini API integration
+- `/server/personas.ts` - Persona registry with full prompt configurations
 - `/types.ts` - TypeScript type definitions
-- `/constants.tsx` - Application constants and personas
+- `/constants.tsx` - Application constants and frontend persona data
 
 ## Tech Stack
 - React 19
@@ -33,9 +34,33 @@ FocalPoint AI is a React + TypeScript + Vite application that provides advanced 
 2. Backend uses multer to save file to disk (not memory)
 3. Backend streams file to Gemini in 16MB chunks using resumable upload protocol
 4. Backend polls Gemini with exponential backoff (1s → 10s cap, ±20% jitter, 10 min timeout)
-5. Frontend receives file URI, sends to `/api/analyze` with project metadata
+5. Frontend receives file URI, sends to `/api/analyze` with project metadata and persona IDs
 6. Backend uses `createPartFromUri` to reference video in Gemini request
 7. Maximum video size: 2GB (enforced on frontend and backend)
+
+### Multi-Persona Architecture
+- Persona configurations stored in `/server/personas.ts`
+- Each persona has unique:
+  - System instruction (identity, lens, critical stance)
+  - User prompt template
+  - Highlight categories (e.g., emotion, craft, clarity, marketability, authorship, cultural_relevance)
+  - Concern categories (e.g., pacing, clarity, character, audio, visual, tone, emotional_distance)
+  - Minimum high-severity concern threshold
+- Available personas:
+  - `acquisitions_director` (Sarah Chen) - Commercial viability, pacing, marketability focus
+  - `cultural_editor` (Maya Lin) - Cultural relevance, emotional resonance, authorship focus
+- Frontend allows selecting one or more personas
+- Backend runs selected personas in parallel using Promise.all
+- Cost scales linearly with persona count (each persona = one Gemini API call)
+- Error isolation: individual persona failures don't block other results
+
+### API Endpoints
+- `GET /api/health` - Health check
+- `GET /api/personas` - List available personas with metadata
+- `POST /api/upload` - Upload video file, returns file URI
+- `POST /api/analyze` - Analyze video with selected personas
+  - Request: `{ title, synopsis, srtContent, questions, language, fileUri, fileMimeType, personaIds }`
+  - Response: `{ results: [{ personaId, status, report?, error?, validationWarnings? }] }`
 
 ### Polling Strategy
 - Initial delay: 1 second
@@ -45,18 +70,18 @@ FocalPoint AI is a React + TypeScript + Vite application that provides advanced 
 - Hard timeout: 10 minutes
 
 ### Analysis Response Schema
-The `/api/analyze` endpoint returns a structured report with:
-- `executive_summary`: Acquisitions decision memo (300-500 words)
+Each persona's report includes:
+- `executive_summary`: Professional memo (300-500 words)
 - `highlights`: Array of 5 positive moments with:
-  - timestamp, seconds, summary, why_it_works, category (emotion/craft/clarity/marketability)
+  - timestamp, seconds, summary, why_it_works, category
 - `concerns`: Array of 5 critical issues with:
   - timestamp, seconds, issue, impact, severity (1-5), category, suggested_fix
 - `answers`: Responses to user-defined research objectives
 
-Server-side validation enforces:
+Server-side validation per persona:
 - Exactly 5 highlights and 5 concerns expected (logs warning if violated)
 - Severity clamped to 1-5 range
-- At least 3 concerns should have severity >= 3
+- Minimum high-severity concerns enforced per persona config
 
 ## Development
 - Run: `npm run dev` (starts both frontend and backend concurrently)
@@ -71,10 +96,10 @@ Server-side validation enforces:
 Autoscale deployment - builds frontend with Vite, serves via Express backend.
 
 ## Recent Changes
-- Implemented exponential backoff polling with jitter for Gemini processing status
-- Implemented resumable upload with 16MB chunks and offset reconciliation
-- Fixed server binding to 0.0.0.0 for reliable Vite proxy connection
-- Bypassed express.json() for upload route to prevent memory buffering
-- Added memory logging and graceful shutdown handlers
-- Separated highlights/concerns with explicit rubric and severity scoring
-- Added server-side validation for response schema
+- Implemented multi-persona architecture with parallel execution
+- Added persona selection UI in UploadForm
+- Added persona tabs in ScreeningRoom for switching between reviewer reports
+- Created persona registry in server/personas.ts with full prompt configurations
+- Added /api/personas endpoint to list available personas
+- Updated /api/analyze to accept personaIds array and return array of results
+- Error isolation prevents single persona failure from blocking others
