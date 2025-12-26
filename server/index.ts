@@ -389,7 +389,7 @@ app.post('/api/analyze', async (req, res) => {
       return res.status(400).json({ error: "Video file URI is required. Please upload a video first." });
     }
 
-    const modelName = "gemini-2.5-flash";
+    const modelName = "gemini-3-flash";
     const langName = language === 'zh-TW' ? 'Traditional Chinese (Taiwan)' : 'English';
 
     const userPrompt = `
