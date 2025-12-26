@@ -3,51 +3,73 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { Persona, AgentReport, Project } from "./types";
 
 /**
- * Validates the runtime environment and project data for security.
+ * Security and Debugging Utility
  */
-const validateContext = (project: Project) => {
-  if (!process.env.API_KEY) {
-    throw new Error("SEC_ERR: API Key missing from environment.");
-  }
-  if (!project.title || !project.synopsis) {
-    throw new Error("DATA_ERR: Essential project metadata is missing.");
+const FocalPointDebug = {
+  log: (stage: string, message: any) => {
+    console.debug(`[FocalPoint DEBUG][${stage}]`, message);
+  },
+  error: (stage: string, error: any) => {
+    console.error(`[FocalPoint ERROR][${stage}]`, error);
   }
 };
 
 /**
- * Converts file to Base64 with a safety buffer check.
+ * Validates the runtime environment and project data for security.
+ */
+const validateContext = (project: Project) => {
+  if (!process.env.API_KEY) {
+    throw new Error("AUTH_ERR: API Key is not configured in the environment.");
+  }
+  if (!project.title || project.title.trim().length === 0) {
+    throw new Error("DATA_ERR: Project title is mandatory.");
+  }
+  if (!project.videoFile) {
+    throw new Error("DATA_ERR: No video asset provided for analysis.");
+  }
+};
+
+/**
+ * Converts file to Base64 with integrity and size checks.
  */
 export const fileToBytes = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
-    // Debug: Monitor file size ingress
-    console.debug(`[FocalPoint Debug] Processing asset: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+    FocalPointDebug.log("Ingest", `Processing ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
     
+    // Safety check for browser memory limits (2GB hard cap, but 1GB is safer for strings)
+    if (file.size > 1.5 * 1024 * 1024 * 1024) {
+      return reject(new Error("LIMIT_ERR: File size exceeds browser memory limits for direct processing."));
+    }
+
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
-      if (!result) {
-        return reject(new Error("FILE_ERR: Empty result from reader."));
-      }
+      if (!result) return reject(new Error("FILE_ERR: Null result from reader."));
+      
       const base64 = result.split(',')[1];
+      FocalPointDebug.log("Encoding", "Base64 conversion successful.");
       resolve(base64);
     };
-    reader.onerror = () => reject(new Error("FILE_ERR: Failed to read asset stream."));
+    reader.onerror = () => reject(new Error("FILE_ERR: Failed to read asset stream. Check file permissions."));
     reader.readAsDataURL(file);
   });
 };
 
-const cleanAndParseJSON = (text: string) => {
+/**
+ * Robust JSON extraction for non-standard model outputs.
+ */
+const extractJSON = (text: string) => {
   try {
     return JSON.parse(text);
   } catch (e) {
-    console.debug("[FocalPoint Debug] Raw response was not pure JSON, attempting extraction...", text);
+    FocalPointDebug.log("Parsing", "Response not pure JSON, attempting pattern match extraction.");
     const firstBrace = text.indexOf('{');
     const lastBrace = text.lastIndexOf('}');
     if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
       const cleanJson = text.substring(firstBrace, lastBrace + 1);
       return JSON.parse(cleanJson);
     }
-    throw new Error("PARSE_ERR: Model response format invalid.");
+    throw new Error("PARSE_ERR: Model failed to provide a valid JSON report.");
   }
 };
 
@@ -56,7 +78,6 @@ export const generateAgentReport = async (
   project: Project,
   videoBase64?: string
 ): Promise<AgentReport> => {
-  // Security check
   validateContext(project);
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -77,32 +98,32 @@ export const generateAgentReport = async (
   const langName = project.language === 'zh-TW' ? 'Traditional Chinese (Taiwan)' : 'English';
 
   const userPrompt = `
-    ACTION: Perform an Acquisitions Appraisal for "${project.title}".
-    
-    METADATA:
-    Synopsis: ${project.synopsis}
-    Script Content: ${project.srtContent.substring(0, 4000)}
+    TASK: Comprehensive Indie Film Appraisal
+    TITLE: "${project.title}"
+    SYNOPSIS: ${project.synopsis}
+    DIALOGUE_CONTEXT: ${project.srtContent.substring(0, 5000)}
 
-    OBJECTIVES:
-    1. Critical Executive Summary (approx 300 words).
-    2. Visual/Temporal Log (10 timestamped critical points).
-    3. Direct answers to user inquiries:
-    ${project.questions.map((q, i) => `- ${q}`).join('\n')}
+    INSTRUCTIONS:
+    1. Provide an Executive Summary (approx 300-400 words).
+    2. List 10 specific timestamped highlights/lowlights based on visual and narrative cues.
+    3. Respond to these focus group objectives:
+    ${project.questions.map((q, i) => `${i+1}. ${q}`).join('\n')}
     
-    LOCALIZATION:
-    All content (summary, highlights, and answers) MUST be written in ${langName}.
+    OUTPUT REQUIREMENTS:
+    - Respond strictly in ${langName}.
+    - Return ONLY a valid JSON object.
   `;
 
   parts.push({ text: userPrompt });
 
   const systemInstruction = `
-    IDENTITY: You are ${persona.name}, ${persona.role}. 
-    BIO: ${persona.description}
-    BEHAVIOR: Sharp, critical, and objective. You analyze for commercial viability and artistic merit.
-    OUTPUT: Valid JSON only. Use the requested language (${langName}) for all text fields.
+    You are ${persona.name}, ${persona.role}. 
+    PROFILE: ${persona.description}
+    LENS: Acquisitions & Market Readiness.
+    STRICT: You must provide your analysis in ${langName}. No English unless requested or technical terms are untranslatable.
   `;
 
-  console.debug(`[FocalPoint Debug] Initiating analysis pass for ${persona.name}. Target Language: ${langName}`);
+  FocalPointDebug.log("API_REQUEST", { persona: persona.name, language: langName });
 
   try {
     const response = await ai.models.generateContent({
@@ -145,13 +166,14 @@ export const generateAgentReport = async (
       }
     });
 
-    const result = cleanAndParseJSON(response.text || "{}");
+    const result = extractJSON(response.text || "{}");
+    FocalPointDebug.log("API_SUCCESS", "Report generated and parsed successfully.");
     return {
       personaId: persona.id,
       ...result
     };
   } catch (error: any) {
-    console.error("[FocalPoint Security/API Error]", error);
-    throw new Error(`Analysis failed: ${error.message}`);
+    FocalPointDebug.error("API_FAILURE", error);
+    throw new Error(`Report generation failed: ${error.message}`);
   }
 };

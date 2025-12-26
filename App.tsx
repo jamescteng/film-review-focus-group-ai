@@ -23,13 +23,10 @@ const App: React.FC = () => {
       try {
         if (aistudio) {
           const hasKey = await aistudio.hasSelectedApiKey();
-          if (hasKey) {
-            console.debug("[FocalPoint Debug] API Key context established.");
-            setState(AppState.IDLE);
-          }
+          if (hasKey) setState(AppState.IDLE);
         }
       } catch (e) {
-        console.error("[FocalPoint Debug] Security/Key check failed", e);
+        console.error("[FocalPoint] Key check failed", e);
       }
     };
     checkKey();
@@ -46,19 +43,17 @@ const App: React.FC = () => {
     setErrorMessage(null);
     setProject(p);
     setState(AppState.ANALYZING);
-    setProcessProgress(15);
+    setProcessProgress(10);
     
     let videoBase64: string | undefined;
     
     if (p.videoFile) {
       try {
-        setStatusMessage("Reading binary asset stream...");
-        // Direct conversion - no sampling as requested
+        setStatusMessage("Ingesting cinematic sequence...");
         videoBase64 = await fileToBytes(p.videoFile);
-        setProcessProgress(45);
-      } catch (e) {
-        console.error("[FocalPoint Debug] Asset processing error:", e);
-        setErrorMessage("Memory error: The video file is too large for standard browser processing. Consider a smaller proxy edit.");
+        setProcessProgress(40);
+      } catch (e: any) {
+        setErrorMessage(e.message || "Asset processing failed.");
         setState(AppState.IDLE);
         return;
       }
@@ -66,17 +61,16 @@ const App: React.FC = () => {
 
     const persona = PERSONAS[0];
     const isZH = p.language === 'zh-TW';
-    setStatusMessage(isZH ? `審查中: ${p.title}...` : `Appraising: ${p.title}...`);
-    setProcessProgress(75);
+    setStatusMessage(isZH ? `正在為 "${p.title}" 生成報告...` : `Appraising "${p.title}"...`);
+    setProcessProgress(70);
     
     try {
       const report = await generateAgentReport(persona, p, videoBase64);
       setReports([report]);
       setProcessProgress(100);
-      setTimeout(() => setState(AppState.VIEWING), 500);
+      setTimeout(() => setState(AppState.VIEWING), 800);
     } catch (err: any) {
-      console.error("[FocalPoint Debug] API Pipeline Failure:", err);
-      setErrorMessage(err.message || "An unexpected error occurred during the appraisal pass.");
+      setErrorMessage(err.message || "The analysis pipeline encountered an error.");
       setState(AppState.IDLE);
     }
   };
