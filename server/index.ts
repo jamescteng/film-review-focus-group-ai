@@ -12,7 +12,10 @@ const isProduction = process.env.NODE_ENV === 'production';
 const PORT = isProduction ? 5000 : 3001;
 
 app.use(cors());
-app.use(express.json({ limit: '100mb' }));
+app.use(express.json({ limit: '500mb' }));
+
+const MAX_VIDEO_SIZE_MB = 100;
+const MAX_VIDEO_SIZE_BYTES = MAX_VIDEO_SIZE_MB * 1024 * 1024;
 
 if (isProduction) {
   app.use(express.static(path.join(__dirname, '../dist')));
@@ -63,6 +66,16 @@ app.post('/api/analyze', async (req, res) => {
 
     if (!videoBase64) {
       return res.status(400).json({ error: "Video asset is required for multimodal appraisal." });
+    }
+
+    const videoSizeBytes = Math.ceil((videoBase64.length * 3) / 4);
+    const videoSizeMB = (videoSizeBytes / 1024 / 1024).toFixed(2);
+    FocalPointLogger.info("Video_Size", `${videoSizeMB} MB`);
+
+    if (videoSizeBytes > MAX_VIDEO_SIZE_BYTES) {
+      return res.status(400).json({ 
+        error: `Video file is too large (${videoSizeMB}MB). Please use a compressed video under ${MAX_VIDEO_SIZE_MB}MB for best results.` 
+      });
     }
 
     const ai = new GoogleGenAI({ apiKey });
@@ -167,6 +180,14 @@ if (isProduction) {
     res.sendFile(path.join(__dirname, '../dist/index.html'));
   });
 }
+
+process.on('uncaughtException', (error) => {
+  FocalPointLogger.error("Uncaught_Exception", error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  FocalPointLogger.error("Unhandled_Rejection", { reason, promise });
+});
 
 const host = isProduction ? '0.0.0.0' : 'localhost';
 app.listen(PORT, host, () => {

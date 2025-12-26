@@ -6,12 +6,16 @@ const FocalPointLogger = {
   error: (stage: string, err: any) => console.error(`[FocalPoint][ERROR][${stage}]`, err)
 };
 
+const MAX_VIDEO_SIZE_MB = 100;
+const MAX_VIDEO_SIZE_BYTES = MAX_VIDEO_SIZE_MB * 1024 * 1024;
+
 export const fileToBytes = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
-    FocalPointLogger.info("Asset_Ingest", { name: file.name, size: `${(file.size / 1024 / 1024).toFixed(2)} MB` });
+    const fileSizeMB = (file.size / 1024 / 1024).toFixed(2);
+    FocalPointLogger.info("Asset_Ingest", { name: file.name, size: `${fileSizeMB} MB` });
     
-    if (file.size > 1024 * 1024 * 1024) {
-      return reject(new Error("MEM_ERR: File exceeds 1GB. Please use a compressed proxy for web-based appraisal."));
+    if (file.size > MAX_VIDEO_SIZE_BYTES) {
+      return reject(new Error(`Video file is too large (${fileSizeMB}MB). Please use a compressed video under ${MAX_VIDEO_SIZE_MB}MB.`));
     }
 
     const reader = new FileReader();
