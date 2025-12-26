@@ -6,38 +6,14 @@ import { UploadForm } from './components/UploadForm';
 import { ProcessingQueue } from './components/ProcessingQueue';
 import { ScreeningRoom } from './components/ScreeningRoom';
 import { generateAgentReport, fileToBytes } from './geminiService';
-import { Button } from './components/Button';
 
 const App: React.FC = () => {
-  const [state, setState] = useState<AppState>(AppState.KEY_SELECTION);
+  const [state, setState] = useState<AppState>(AppState.IDLE);
   const [project, setProject] = useState<Project | null>(null);
   const [reports, setReports] = useState<AgentReport[]>([]);
   const [statusMessage, setStatusMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [processProgress, setProcessProgress] = useState(0);
-
-  const aistudio = (window as any).aistudio;
-
-  useEffect(() => {
-    const checkKey = async () => {
-      try {
-        if (aistudio) {
-          const hasKey = await aistudio.hasSelectedApiKey();
-          if (hasKey) setState(AppState.IDLE);
-        }
-      } catch (e) {
-        console.error("[FocalPoint] Key check bypass:", e);
-      }
-    };
-    checkKey();
-  }, [aistudio]);
-
-  const handleOpenKeySelector = async () => {
-    if (aistudio) {
-      await aistudio.openSelectKey();
-      setState(AppState.IDLE);
-    }
-  };
 
   const startAnalysis = async (p: Project) => {
     setErrorMessage(null);
@@ -88,25 +64,6 @@ const App: React.FC = () => {
       </nav>
 
       <div className="relative pt-24 pb-20">
-        {state === AppState.KEY_SELECTION && (
-          <div className="flex flex-col items-center justify-center min-h-[85vh] px-8 text-center max-w-5xl mx-auto">
-            <h1 className="text-7xl md:text-[10rem] font-serif mb-12 leading-none tracking-tighter text-slate-900">
-              Elevate <br/> <span className="italic text-slate-200 font-bold">Your Edit.</span>
-            </h1>
-            <p className="text-slate-500 text-2xl md:text-3xl mb-20 leading-relaxed max-w-3xl font-light">
-              Advanced multimodal focus groups for professional indie creators. 
-            </p>
-            <div className="space-y-10 w-full max-w-md">
-              <Button onClick={handleOpenKeySelector} className="w-full py-10 rounded-[2.5rem] text-3xl shadow-2xl hover:translate-y-[-4px] font-serif italic">
-                Enter Screening Room
-              </Button>
-              <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="block text-[10px] uppercase tracking-[0.5em] text-slate-300 hover:text-slate-900 transition-colors font-black pointer-events-auto">
-                Paid Tier API Key Required →
-              </a>
-            </div>
-          </div>
-        )}
-
         {state === AppState.IDLE && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
             {errorMessage && (
