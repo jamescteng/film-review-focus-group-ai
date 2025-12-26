@@ -46,7 +46,7 @@ FocalPoint AI is a React + TypeScript + Vite application that provides advanced 
 
 ### Analysis Response Schema
 The `/api/analyze` endpoint returns a structured report with:
-- `summary`: Executive critical summary (300-500 words)
+- `executive_summary`: Acquisitions decision memo (300-500 words)
 - `highlights`: Array of 5 positive moments with:
   - timestamp, seconds, summary, why_it_works, category (emotion/craft/clarity/marketability)
 - `concerns`: Array of 5 critical issues with:
