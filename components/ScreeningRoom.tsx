@@ -88,47 +88,47 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
         <Button variant="outline" size="md" className="rounded-full px-8 border-slate-200" onClick={() => window.location.reload()}>New Screening</Button>
       </header>
 
-      <div className="border-b border-slate-100 px-8 py-4 bg-white flex items-center gap-3 overflow-x-auto">
-        {reports.map((report, index) => {
-          const persona = PERSONAS.find(p => p.id === report.personaId);
-          if (!persona) return null;
-          const isActive = index === activeReportIndex;
-          return (
-            <button
-              key={report.personaId}
-              onClick={() => setActiveReportIndex(index)}
-              className={`flex items-center gap-3 px-5 py-3 rounded-full transition-all whitespace-nowrap ${
-                isActive
-                  ? 'bg-slate-900 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              <img
-                src={persona.avatar}
-                alt={persona.name}
-                className="w-8 h-8 rounded-full object-cover"
-              />
-              <span className="font-bold text-sm">{persona.name}</span>
-            </button>
-          );
-        })}
+      <div className="border-b border-slate-100 px-8 py-4 bg-white">
+        <div className="flex items-center gap-3 overflow-x-auto">
+          {reports.map((report, index) => {
+            const persona = PERSONAS.find(p => p.id === report.personaId);
+            if (!persona) return null;
+            const isActive = index === activeReportIndex;
+            return (
+              <button
+                key={report.personaId}
+                onClick={() => setActiveReportIndex(index)}
+                className={`flex items-center gap-3 px-5 py-3 rounded-full transition-all whitespace-nowrap ${
+                  isActive
+                    ? 'bg-slate-900 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <img
+                  src={persona.avatar}
+                  alt={persona.name}
+                  className="w-8 h-8 rounded-full object-cover"
+                />
+                <span className="font-bold text-sm">{persona.name}</span>
+              </button>
+            );
+          })}
 
-        {isAnalyzing && analyzingPersonaId && (
-          <div className="flex items-center gap-3 px-5 py-3 rounded-full bg-blue-50 text-blue-600 whitespace-nowrap">
-            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
+          {isAnalyzing && analyzingPersonaId && (
+            <div className="flex items-center gap-3 px-5 py-3 rounded-full bg-blue-50 text-blue-600 whitespace-nowrap">
+              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              </div>
+              <span className="font-bold text-sm">Analyzing...</span>
             </div>
-            <span className="font-bold text-sm">Analyzing...</span>
-          </div>
-        )}
+          )}
 
-        {availablePersonas.length > 0 && !isAnalyzing && (
-          <div className="relative">
+          {availablePersonas.length > 0 && !isAnalyzing && (
             <button
-              onClick={() => setShowAddPersona(!showAddPersona)}
+              onClick={() => setShowAddPersona(v => !v)}
               className="flex items-center gap-2 px-5 py-3 rounded-full border-2 border-dashed border-slate-300 text-slate-500 hover:border-slate-500 hover:text-slate-700 transition-all whitespace-nowrap"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -136,38 +136,40 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
               </svg>
               <span className="font-bold text-sm">Add Reviewer</span>
             </button>
+          )}
+        </div>
 
-            {showAddPersona && (
-              <div className="absolute top-full right-0 md:left-0 mt-4 bg-white rounded-3xl shadow-[0_32px_64px_-16px_rgba(0,0,0,0.12)] border border-slate-100 p-3 z-[100] min-w-[320px] animate-in fade-in zoom-in-95 duration-200 origin-top-right md:origin-top-left">
-                <div className="px-4 py-3 mb-2 border-b border-slate-50">
-                  <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Available Reviewers</p>
-                </div>
-                <div className="space-y-1">
-                  {availablePersonas.map(persona => (
-                    <button
-                      key={persona.id}
-                      onClick={() => handleAddPersona(persona.id)}
-                      className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 transition-all text-left group"
-                    >
-                      <img
-                        src={persona.avatar}
-                        alt={persona.name}
-                        className="w-12 h-12 rounded-xl object-cover shadow-sm group-hover:scale-105 transition-transform"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="font-bold text-slate-900 leading-tight">{persona.name}</p>
-                        <p className="text-xs text-slate-500 mt-0.5">{persona.role}</p>
-                      </div>
-                      <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <svg className="w-4 h-4 text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                        </svg>
-                      </div>
-                    </button>
-                  ))}
-                </div>
+        {availablePersonas.length > 0 && !isAnalyzing && showAddPersona && (
+          <div className="relative mt-4">
+            <div className="absolute left-0 top-0 bg-white rounded-3xl shadow-[0_32px_64px_-16px_rgba(0,0,0,0.12)] border border-slate-100 p-3 z-[100] min-w-[320px] animate-in fade-in zoom-in-95 duration-200">
+              <div className="px-4 py-3 mb-2 border-b border-slate-50">
+                <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Available Reviewers</p>
               </div>
-            )}
+              <div className="space-y-1">
+                {availablePersonas.map(persona => (
+                  <button
+                    key={persona.id}
+                    onClick={() => handleAddPersona(persona.id)}
+                    className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 transition-all text-left group"
+                  >
+                    <img
+                      src={persona.avatar}
+                      alt={persona.name}
+                      className="w-12 h-12 rounded-xl object-cover shadow-sm group-hover:scale-105 transition-transform"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-slate-900 leading-tight">{persona.name}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">{persona.role}</p>
+                    </div>
+                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <svg className="w-4 h-4 text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>

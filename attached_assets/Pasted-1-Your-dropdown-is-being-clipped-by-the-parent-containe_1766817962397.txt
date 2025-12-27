@@ -1,0 +1,96 @@
+1) Your dropdown is being clipped by the parent container
+
+The “Add Reviewer” control sits inside this bar:
+
+<div className="border-b ... bg-white flex items-center gap-3 overflow-x-auto">
+
+
+That overflow-x-auto is the red flag. In practice, an element with overflow set (auto/hidden/scroll) often becomes a clipping container for positioned descendants. Even though you only set x overflow, browsers frequently end up clipping in ways that prevent an absolutely-positioned child from rendering outside that bar.
+
+Your dropdown is:
+
+<div className="absolute top-full ... mt-4 ... z-[100] ...">
+
+
+So it’s trying to render below the bar. If the bar is clipping, the dropdown exists in the DOM but is not visible, which matches your symptoms: hover effect works, click toggles state, but you don’t see the menu.
+
+Fix options (pick one)
+
+Option A (recommended): remove overflow from the ancestor that contains the dropdown
+Make the scrolling apply to an inner wrapper, not the container that owns the dropdown.
+
+<div className="border-b border-slate-100 px-8 py-4 bg-white">
+  <div className="flex items-center gap-3 overflow-x-auto">
+    {/* reports pills + add reviewer */}
+  </div>
+</div>
+
+
+But: if you keep the dropdown inside the scrolling row, it can still get clipped. Best is to keep the dropdown outside the overflow area (next option).
+
+Option B: Keep the scrolling row, but render the dropdown outside it (portal)
+Render the menu in a portal to document.body (or a top-level overlay div). This avoids all overflow/stacking issues.
+
+Option C: Change overflow behavior
+If you don’t actually need the container itself to be a clipping/scroll container, remove overflow-x-auto. If you do need horizontal scroll, keep it on an inner div and ensure the dropdown is not inside that overflow context.
+
+2) z-index won’t save you if you’re clipped
+
+You already set z-[100]. That helps only when the element is covered by something. It does not help when the element is clipped by an ancestor with overflow.
+
+So even if showAddPersona becomes true, the dropdown can be invisible.
+
+3) Another plausible issue: a parent creates a stacking context above it
+
+Your header is sticky top-0 z-40. Your dropdown is inside a different section, so this is less likely the cause than clipping, but it can still matter if the dropdown overlaps the header area.
+
+Still: if the dropdown isn’t showing at all, clipping is the stronger diagnosis.
+
+4) Quick ways to confirm in 30 seconds
+
+In React DevTools, click the button and confirm showAddPersona flips to true.
+
+In Elements inspector, search for “Available Reviewers” after clicking. If you can see the dropdown DOM node but it’s not visible, it’s a CSS containment/clipping problem.
+
+Temporarily add bg-red-500 to the dropdown container to see if any part renders.
+
+Concrete minimal code change (no portal)
+
+This keeps your horizontal scrolling pills but prevents the dropdown from being inside the overflow container:
+
+<div className="border-b border-slate-100 px-8 py-4 bg-white">
+  <div className="flex items-center gap-3 overflow-x-auto">
+    {reports.map(...)}
+    {isAnalyzing && ...}
+    {/* Put ONLY the button here */}
+    {availablePersonas.length > 0 && !isAnalyzing && (
+      <button
+        onClick={() => setShowAddPersona(v => !v)}
+        className="flex items-center gap-2 px-5 py-3 rounded-full border-2 border-dashed ..."
+      >
+        ...
+      </button>
+    )}
+  </div>
+
+  {/* Put the dropdown OUTSIDE the overflow row */}
+  {availablePersonas.length > 0 && !isAnalyzing && showAddPersona && (
+    <div className="relative">
+      <div className="absolute right-0 md:left-0 mt-4 bg-white ... z-[100]">
+        ...
+      </div>
+    </div>
+  )}
+</div>
+
+
+(You may want to position that relative wrapper appropriately depending on where you want the dropdown anchored.)
+
+One small improvement unrelated to the bug
+
+Use functional state update on the toggle to avoid any edge cases with stale closures:
+
+onClick={() => setShowAddPersona(v => !v)}
+
+
+This is not the reason it’s failing, but it’s a good practice.

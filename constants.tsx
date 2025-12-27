@@ -1,9 +1,73 @@
 import { Persona } from './types';
 
+const INTERNATIONAL_NAMES = [
+  { first: 'Amara', last: 'Okonkwo' },
+  { first: 'Yuki', last: 'Tanaka' },
+  { first: 'Elena', last: 'Vasquez' },
+  { first: 'Priya', last: 'Sharma' },
+  { first: 'Fatima', last: 'Al-Rashid' },
+  { first: 'Sofia', last: 'Andersen' },
+  { first: 'Mei', last: 'Zhang' },
+  { first: 'Aisha', last: 'Mbeki' },
+  { first: 'Isabella', last: 'Romano' },
+  { first: 'Nadia', last: 'Petrov' },
+  { first: 'Ling', last: 'Chen' },
+  { first: 'Zara', last: 'Hussain' },
+  { first: 'Chioma', last: 'Eze' },
+  { first: 'Hana', last: 'Kim' },
+  { first: 'Leila', last: 'Moradi' },
+  { first: 'Nina', last: 'Johansson' },
+  { first: 'Riya', last: 'Patel' },
+  { first: 'Chloe', last: 'Dubois' },
+  { first: 'Ananya', last: 'Reddy' },
+  { first: 'Thandi', last: 'Ndlovu' },
+  { first: 'Sana', last: 'Nakamura' },
+  { first: 'Ava', last: 'O\'Brien' },
+  { first: 'Ingrid', last: 'Berg' },
+  { first: 'Carmen', last: 'Reyes' },
+  { first: 'Olga', last: 'Volkov' },
+  { first: 'Emeka', last: 'Adeyemi' },
+  { first: 'Kenji', last: 'Watanabe' },
+  { first: 'Marco', last: 'Silva' },
+  { first: 'Raj', last: 'Gupta' },
+  { first: 'Omar', last: 'Farouk' },
+  { first: 'Lars', last: 'Nielsen' },
+  { first: 'Wei', last: 'Liu' },
+  { first: 'Kwame', last: 'Asante' },
+  { first: 'Alessandro', last: 'Bianchi' },
+  { first: 'Dmitri', last: 'Kozlov' },
+  { first: 'Jin', last: 'Park' },
+  { first: 'Hassan', last: 'Mahmoud' },
+  { first: 'Chidi', last: 'Okwu' },
+  { first: 'Takeshi', last: 'Yamamoto' },
+  { first: 'Arjun', last: 'Nair' },
+  { first: 'Erik', last: 'Lindqvist' },
+  { first: 'Vikram', last: 'Singh' },
+  { first: 'Pierre', last: 'Laurent' },
+  { first: 'Kofi', last: 'Mensah' },
+  { first: 'Andrei', last: 'Popescu' },
+];
+
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+function getRandomNames(count: number): string[] {
+  const shuffled = shuffleArray(INTERNATIONAL_NAMES);
+  return shuffled.slice(0, count).map(n => `${n.first} ${n.last}`);
+}
+
+const randomNames = getRandomNames(2);
+
 export const PERSONAS: Persona[] = [
   {
     id: 'acquisitions_director',
-    name: 'Sarah Chen',
+    name: randomNames[0],
     role: 'Senior Acquisitions Director',
     description: 'A sharp, no-nonsense executive looking for commercial viability and emotional "stickiness".',
     instruction: 'Evaluates films through the lens of a distributor. Cares about hooks, emotional payoffs, and whether cinematography feels premium enough for high-end platforms.',
@@ -18,7 +82,7 @@ export const PERSONAS: Persona[] = [
   },
   {
     id: 'cultural_editor',
-    name: 'Maya Lin',
+    name: randomNames[1],
     role: 'Cultural Editor',
     description: 'A culturally literate young editor who shapes taste and conversation at a major publication.',
     instruction: 'Evaluates films through the lens of cultural relevance, emotional resonance, and authorship. Values originality, tonal control, and films that feel alive in the current moment.',
