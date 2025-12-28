@@ -22,6 +22,9 @@ const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
 const PORT = isProduction ? 5000 : 3001;
 
+// Trust the first proxy (Replit / load balancer)
+app.set('trust proxy', 1);
+
 // =============================================================================
 // Logging (defined early for use in security middleware)
 // =============================================================================
