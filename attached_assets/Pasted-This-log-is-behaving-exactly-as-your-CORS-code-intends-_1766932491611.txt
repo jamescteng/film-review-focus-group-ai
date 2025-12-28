@@ -1,0 +1,130 @@
+This log is behaving exactly as your CORS code intends: the browser request’s Origin is a Replit deployment domain (…pike.replit.dev) and your backend is rejecting it because it is not on the allowlist. The Vite proxy message is a red herring here—your server is seeing a real browser-originated request and is blocking it at the CORS middleware.
+
+Below is the clean way to fix it without weakening your security posture.
+
+What’s happening (root cause)
+
+Frontend is being served from:
+https://997189cb-6044-4e22-9b29-93ade65310c8-00-1qexyzgeie8uv.pike.replit.dev
+
+Backend CORS middleware checks the Origin header.
+
+Your allowlist does not include that origin, so you throw: Not allowed by CORS.
+
+This is expected because Replit preview URLs change frequently, and the hostnames are not stable.
+
+Best-practice fix (recommended): allow your Replit domain pattern safely
+Goal
+
+Allow:
+
+localhost in dev
+
+your stable production domain(s)
+
+Replit preview domains for your own app without allowing *
+
+Suggested policy
+
+Always allow http://localhost:* and http://127.0.0.1:* for local dev.
+
+Allow exact origins from env: CORS_ALLOW_ORIGINS.
+
+Allow Replit dev domains with a controlled regex:
+
+*.replit.dev
+
+and possibly *.replit.app (if you use it)
+
+This is a normal approach for preview deployments.
+
+Concrete Express CORS implementation
+
+In server/index.ts (or where your CORS config lives), replace your origin function with something like:
+
+import cors from "cors";
+
+const ALLOWLIST = (process.env.CORS_ALLOW_ORIGINS || "")
+  .split(",")
+  .map(s => s.trim())
+  .filter(Boolean);
+
+// Allow Replit preview domains
+const REPLIT_ALLOWED = [
+  /\.replit\.dev$/i,
+  /\.replit\.app$/i,
+];
+
+function isAllowedOrigin(origin: string) {
+  // exact allowlist match
+  if (ALLOWLIST.includes(origin)) return true;
+
+  // localhost dev
+  if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) return true;
+
+  // replit preview domains
+  try {
+    const { hostname, protocol } = new URL(origin);
+    if (protocol === "https:" && REPLIT_ALLOWED.some(r => r.test(hostname))) return true;
+  } catch {
+    // ignore invalid origin
+  }
+
+  return false;
+}
+
+export const corsMiddleware = cors({
+  origin: (origin, cb) => {
+    // Some non-browser requests may have no Origin header
+    if (!origin) return cb(null, true);
+
+    if (isAllowedOrigin(origin)) return cb(null, true);
+
+    // Log and reject
+    console.warn("[FocalPoint][WARN][CORS] Blocked request from origin:", origin);
+    return cb(new Error("Not allowed by CORS"));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+});
+
+app.use(corsMiddleware);
+
+Notes
+
+This does not open CORS to *.
+
+It permits Replit preview URLs without having to update env vars every run.
+
+It still blocks arbitrary third-party origins.
+
+Alternative (even stricter): allow only your Replit project origins
+
+If you want to be more restrictive than “any .replit.dev”, you can:
+
+allow only hostnames containing your project slug or a prefix pattern
+
+but Replit hostnames can be opaque; the above is usually acceptable for preview/dev
+
+Important security note: CORS is not authentication
+
+CORS is a browser enforcement mechanism, not a security boundary. It prevents other websites from calling your API from a browser, but it does not stop direct curl/Postman usage.
+
+So your CORS policy is good hygiene, but for cost protection you still want:
+
+rate limiting on upload/analyze
+
+request size limits
+
+ideally auth if you go multi-user
+
+Quick diagnostic: are you actually using Vite proxy in this environment?
+
+Your log shows:
+
+[Vite Proxy] Starting large file upload...
+
+But the backend sees origin …replit.dev, which suggests the request is not being proxied the way you think (or the proxy is preserving origin). On Replit, depending on how you deploy frontend/backend, you may effectively be cross-origin anyway.
+
+Recommendation: treat this as a true cross-origin deployment and implement the allowlist/pattern fix above.

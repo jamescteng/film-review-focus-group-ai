@@ -92,12 +92,17 @@ app.use(cors({
     if (!origin) {
       return callback(null, !isProduction);
     }
-    // In production, check against allowed origins and Replit domains
-    if (isProduction) {
-      if (origin.endsWith('.repl.co') || origin.endsWith('.replit.dev') || origin.endsWith('.replit.app')) {
-        return callback(null, true);
-      }
+    
+    // Always allow Replit domains (both dev and production on Replit)
+    if (origin.endsWith('.repl.co') || origin.endsWith('.replit.dev') || origin.endsWith('.replit.app')) {
+      return callback(null, true);
     }
+    
+    // Allow localhost in development
+    if (!isProduction && /^http:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/i.test(origin)) {
+      return callback(null, true);
+    }
+    
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
