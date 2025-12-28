@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Project, AgentReport, Persona } from '../types';
 import { PERSONAS } from '../constants.tsx';
 import { Button } from './Button';
+import { Card, Badge, Pill, SeverityPill, Tabs } from './ui';
 
 interface ScreeningRoomProps {
   project: Project;
@@ -12,13 +13,6 @@ interface ScreeningRoomProps {
   analyzingPersonaId: string | null;
   statusMessage: string;
 }
-
-const getSeverityColor = (severity: number) => {
-  if (severity >= 4) return 'bg-red-100 text-red-800 border-red-200';
-  if (severity >= 3) return 'bg-orange-100 text-orange-800 border-orange-200';
-  if (severity >= 2) return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-  return 'bg-slate-100 text-slate-600 border-slate-200';
-};
 
 const getCategoryIcon = (category: string) => {
   const icons: Record<string, string> = {
@@ -54,6 +48,36 @@ const getCategoryIcon = (category: string) => {
   return icons[category] || '📌';
 };
 
+const formatCategory = (category: string) => {
+  return category.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+};
+
+const ExpandableContent: React.FC<{ content: string; maxLength?: number }> = ({ 
+  content, 
+  maxLength = 120 
+}) => {
+  const [expanded, setExpanded] = useState(false);
+  const shouldTruncate = content.length > maxLength;
+  
+  if (!shouldTruncate) {
+    return <p className="text-[15px] text-slate-600 leading-relaxed">{content}</p>;
+  }
+  
+  return (
+    <div>
+      <p className="text-[15px] text-slate-600 leading-relaxed">
+        {expanded ? content : `${content.slice(0, maxLength)}...`}
+      </p>
+      <button 
+        onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
+        className="text-sm font-medium text-blue-600 hover:text-blue-700 mt-2"
+      >
+        {expanded ? 'Show less' : 'Read more'}
+      </button>
+    </div>
+  );
+};
+
 export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({ 
   project, 
   reports, 
@@ -64,9 +88,10 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
   statusMessage
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [activeTab, setActiveTab] = useState<'highlights' | 'concerns'>('highlights');
+  const [activeTab, setActiveTab] = useState<'summary' | 'highlights' | 'concerns'>('summary');
   const [activeReportIndex, setActiveReportIndex] = useState(0);
   const [showAddPersona, setShowAddPersona] = useState(false);
+  const [rightPanelTab, setRightPanelTab] = useState<'profile' | 'goals'>('profile');
   
   const activeReport = reports[activeReportIndex];
   const activePersona = PERSONAS.find(p => p.id === activeReport?.personaId) || PERSONAS[0];
@@ -84,26 +109,34 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
   };
 
   if (!activeReport || !activePersona) {
-    return <div className="p-24 text-center text-slate-400 text-2xl font-light">Analysis session could not be retrieved.</div>;
+    return <div className="p-24 text-center text-slate-400 text-xl">Analysis session could not be retrieved.</div>;
   }
 
+  const contentTabs = [
+    { id: 'summary', label: 'Summary', color: 'blue' as const },
+    { id: 'highlights', label: 'Highlights', count: activeReport.highlights?.length || 0, color: 'emerald' as const },
+    { id: 'concerns', label: 'Concerns', count: activeReport.concerns?.length || 0, color: 'rose' as const },
+  ];
+
   return (
-    <div className="min-h-screen bg-[#fcfcfc] flex flex-col text-slate-900">
-      <header className="border-b border-slate-100 px-8 py-8 flex justify-between items-center bg-white/90 backdrop-blur-2xl sticky top-0 z-40">
+    <div className="min-h-screen bg-slate-50 flex flex-col text-slate-800">
+      <header className="border-b border-slate-200/70 px-6 py-5 flex justify-between items-center bg-white sticky top-0 z-40">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">{project.title}</h2>
-          <div className="flex items-center gap-3 mt-1">
-            <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-            <p className="text-[10px] text-slate-400 uppercase tracking-[0.2em] font-bold">
+          <h2 className="text-xl font-bold text-slate-900 tracking-tight">{project.title}</h2>
+          <div className="flex items-center gap-2 mt-1">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+            <p className="text-[11px] text-slate-400 uppercase tracking-wider font-semibold">
               {reports.length} Report{reports.length > 1 ? 's' : ''} Generated
             </p>
           </div>
         </div>
-        <Button variant="outline" size="md" className="rounded-full px-8 border-slate-200" onClick={() => window.location.reload()}>New Screening</Button>
+        <Button variant="outline" size="md" className="rounded-lg px-5 border-slate-200" onClick={() => window.location.reload()}>
+          New Screening
+        </Button>
       </header>
 
-      <div className="border-b border-slate-100 px-8 py-4 bg-white">
-        <div className="flex items-center gap-3 overflow-x-auto">
+      <div className="border-b border-slate-200/70 px-6 py-3 bg-white">
+        <div className="flex items-center gap-2 overflow-x-auto">
           {reports.map((report, index) => {
             const persona = PERSONAS.find(p => p.id === report.personaId);
             if (!persona) return null;
@@ -112,7 +145,7 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
               <button
                 key={report.personaId}
                 onClick={() => setActiveReportIndex(index)}
-                className={`flex items-center gap-3 px-5 py-3 rounded-full transition-all whitespace-nowrap ${
+                className={`flex items-center gap-2.5 px-4 py-2 rounded-lg transition-all whitespace-nowrap ${
                   isActive
                     ? 'bg-slate-900 text-white'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -121,93 +154,84 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
                 <img
                   src={persona.avatar}
                   alt={persona.name}
-                  className="w-8 h-8 rounded-full object-cover"
+                  className="w-7 h-7 rounded-full object-cover"
                 />
-                <span className="font-bold text-sm">{persona.name}</span>
+                <span className="font-semibold text-sm">{persona.name}</span>
               </button>
             );
           })}
 
           {isAnalyzing && analyzingPersonaId && (
-            <div className="flex items-center gap-3 px-5 py-3 rounded-full bg-blue-50 text-blue-600 whitespace-nowrap">
-              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+            <div className="flex items-center gap-2.5 px-4 py-2 rounded-lg bg-blue-50 text-blue-600 whitespace-nowrap">
+              <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center">
                 <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
               </div>
-              <span className="font-bold text-sm">Analyzing...</span>
+              <span className="font-semibold text-sm">Analyzing...</span>
             </div>
           )}
 
           {availablePersonas.length > 0 && !isAnalyzing && (
             <button
               onClick={() => setShowAddPersona(v => !v)}
-              className="flex items-center gap-2 px-5 py-3 rounded-full border-2 border-dashed border-slate-300 text-slate-500 hover:border-slate-500 hover:text-slate-700 transition-all whitespace-nowrap"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-dashed border-slate-300 text-slate-500 hover:border-slate-400 hover:text-slate-600 transition-all whitespace-nowrap"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>
-              <span className="font-bold text-sm">Add Reviewer</span>
+              <span className="font-semibold text-sm">Add Reviewer</span>
             </button>
           )}
         </div>
 
         {availablePersonas.length > 0 && !isAnalyzing && showAddPersona && (
-          <div className="relative mt-4">
-            <div className="absolute left-0 top-0 bg-white rounded-3xl shadow-[0_32px_64px_-16px_rgba(0,0,0,0.12)] border border-slate-100 p-3 z-[100] min-w-[320px] animate-in fade-in zoom-in-95 duration-200">
-              <div className="px-4 py-3 mb-2 border-b border-slate-50">
-                <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Available Reviewers</p>
+          <div className="relative mt-3">
+            <Card variant="elevated" className="absolute left-0 top-0 p-2 z-[100] min-w-[300px]">
+              <div className="px-3 py-2 mb-1 border-b border-slate-100">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Available Reviewers</p>
               </div>
               <div className="space-y-1">
                 {availablePersonas.map(persona => (
                   <button
                     key={persona.id}
                     onClick={() => handleAddPersona(persona.id)}
-                    className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 transition-all text-left group"
+                    className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition-all text-left group"
                   >
                     <img
                       src={persona.avatar}
                       alt={persona.name}
-                      className="w-12 h-12 rounded-xl object-cover shadow-sm group-hover:scale-105 transition-transform"
+                      className="w-10 h-10 rounded-lg object-cover"
                     />
                     <div className="flex-1 min-w-0">
-                      <p className="font-bold text-slate-900 leading-tight">{persona.name}</p>
-                      <p className="text-xs text-slate-500 mt-0.5">{persona.role}</p>
-                      {persona.focusAreas && (
-                        <div className="flex flex-wrap gap-1 mt-1.5">
-                          {persona.focusAreas.map((area, idx) => (
-                            <span key={idx} className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-medium">
-                              {area}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                      <p className="font-semibold text-slate-900 text-sm">{persona.name}</p>
+                      <p className="text-xs text-slate-500">{persona.role}</p>
                     </div>
-                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <svg className="w-4 h-4 text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <svg className="w-3 h-3 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                       </svg>
                     </div>
                   </button>
                 ))}
               </div>
-            </div>
+            </Card>
           </div>
         )}
       </div>
 
       {isAnalyzing && statusMessage && (
-        <div className="px-8 py-3 bg-blue-50 border-b border-blue-100">
-          <p className="text-blue-600 text-sm font-medium text-center animate-pulse">{statusMessage}</p>
+        <div className="px-6 py-2 bg-blue-50 border-b border-blue-100">
+          <p className="text-blue-600 text-sm font-medium text-center">{statusMessage}</p>
         </div>
       )}
 
       <main className="flex-1 grid grid-cols-1 xl:grid-cols-12">
-        <div className="xl:col-span-8 p-8 md:p-12 lg:p-16 overflow-y-auto space-y-20 border-r border-slate-100">
+        <div className="xl:col-span-8 p-6 lg:p-8 overflow-y-auto space-y-6 border-r border-slate-200/70">
           
           <section>
-            <div className="aspect-video bg-black rounded-[2.5rem] overflow-hidden shadow-[0_48px_80px_-24px_rgba(0,0,0,0.15)] border-4 border-white">
+            <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-card">
               <video 
                 ref={videoRef}
                 src={project.videoUrl} 
@@ -219,147 +243,149 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
             </div>
           </section>
 
-          <section className="space-y-10">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => setActiveTab('highlights')}
-                className={`px-6 py-3 rounded-full text-sm font-bold uppercase tracking-widest transition-all ${
-                  activeTab === 'highlights' 
-                    ? 'bg-emerald-600 text-white' 
-                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                }`}
-              >
-                Highlights ({activeReport.highlights?.length || 0})
-              </button>
-              <button
-                onClick={() => setActiveTab('concerns')}
-                className={`px-6 py-3 rounded-full text-sm font-bold uppercase tracking-widest transition-all ${
-                  activeTab === 'concerns' 
-                    ? 'bg-rose-600 text-white' 
-                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                }`}
-              >
-                Concerns ({activeReport.concerns?.length || 0})
-              </button>
-              <div className="h-[1px] flex-1 bg-slate-100" />
-            </div>
+          <section className="space-y-5">
+            <Tabs 
+              tabs={contentTabs}
+              activeTab={activeTab}
+              onTabChange={(id) => setActiveTab(id as 'summary' | 'highlights' | 'concerns')}
+            />
+
+            {activeTab === 'summary' && (
+              <Card variant="elevated" className="p-6">
+                <div className="prose prose-slate max-w-none">
+                  <div className="text-[17px] text-slate-700 leading-[1.8] space-y-4">
+                    {(activeReport.executive_summary || '').split('\n').filter(p => p.trim()).map((para, i) => (
+                      <p key={i}>{para}</p>
+                    ))}
+                  </div>
+                </div>
+              </Card>
+            )}
 
             {activeTab === 'highlights' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {activeReport.highlights?.map((h, i) => (
-                  <button
+                  <Card
                     key={i}
+                    as="button"
+                    variant="highlight"
                     onClick={() => seekTo(h.seconds)}
-                    className="group flex flex-col bg-white border border-emerald-100 rounded-[2rem] p-8 hover:shadow-xl hover:border-emerald-400 transition-all text-left"
+                    className="p-5 text-left flex flex-col"
                   >
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="text-xs font-bold px-4 py-1.5 bg-slate-900 text-white rounded-full">{h.timestamp}</span>
-                      <span className="px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 flex items-center gap-1.5">
-                        {getCategoryIcon(h.category)} {h.category.replace('_', ' ')}
-                      </span>
+                    <div className="flex items-center gap-2 mb-3 flex-wrap">
+                      <Badge variant="dark">{h.timestamp}</Badge>
+                      <Pill icon={getCategoryIcon(h.category)} variant="highlight">
+                        {formatCategory(h.category)}
+                      </Pill>
                     </div>
-                    <p className="text-lg text-slate-800 leading-relaxed font-medium mb-3">{h.summary}</p>
-                    <p className="text-sm text-slate-500 leading-relaxed">{h.why_it_works}</p>
-                  </button>
+                    <p className="text-[15px] text-slate-800 font-medium mb-2 leading-snug">{h.summary}</p>
+                    <ExpandableContent content={h.why_it_works} />
+                  </Card>
                 ))}
               </div>
             )}
 
             {activeTab === 'concerns' && (
-              <div className="grid grid-cols-1 gap-6">
+              <div className="space-y-4">
                 {activeReport.concerns?.map((c, i) => (
-                  <button
+                  <Card
                     key={i}
+                    as="button"
+                    variant="concern"
                     onClick={() => seekTo(c.seconds)}
-                    className="group flex flex-col bg-white border border-rose-100 rounded-[2rem] p-8 hover:shadow-xl hover:border-rose-400 transition-all text-left"
+                    className="p-5 text-left"
                   >
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs font-bold px-4 py-1.5 bg-slate-900 text-white rounded-full">{c.timestamp}</span>
-                        <span className="px-3 py-1.5 rounded-full text-xs font-bold bg-slate-100 text-slate-600 flex items-center gap-1.5">
-                          {getCategoryIcon(c.category)} {c.category.replace('_', ' ')}
-                        </span>
-                      </div>
-                      <span className={`px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider border ${getSeverityColor(c.severity)}`}>
-                        Severity {c.severity}/5
-                      </span>
+                    <div className="flex items-center gap-2 mb-3 flex-wrap">
+                      <Badge variant="dark">{c.timestamp}</Badge>
+                      <Pill icon={getCategoryIcon(c.category)} variant="default">
+                        {formatCategory(c.category)}
+                      </Pill>
+                      <SeverityPill severity={c.severity} />
                     </div>
-                    <p className="text-lg text-slate-800 leading-relaxed font-semibold mb-2">{c.issue}</p>
-                    <p className="text-sm text-rose-700 leading-relaxed mb-4 font-medium">Impact: {c.impact}</p>
+                    <p className="text-[15px] text-slate-800 font-semibold mb-2 leading-snug">{c.issue}</p>
+                    <p className="text-sm text-rose-600 font-medium mb-3">Impact: {c.impact}</p>
                     <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Suggested Fix</p>
+                      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Suggested Fix</p>
                       <p className="text-sm text-slate-600 leading-relaxed">{c.suggested_fix}</p>
                     </div>
-                  </button>
+                  </Card>
                 ))}
               </div>
             )}
           </section>
-
-          <section className="bg-slate-50 p-12 md:p-16 rounded-[3.5rem] border border-slate-100">
-            <h3 className="text-xl font-bold text-slate-900 mb-8 border-b border-slate-200 pb-6">Executive Summary</h3>
-            <div className="max-w-none text-slate-700 leading-[2.1] text-xl font-light">
-              {(activeReport.executive_summary || '').split('\n').map((para, i) => <p key={i} className="mb-8">{para}</p>)}
-            </div>
-          </section>
         </div>
 
-        <div className="xl:col-span-4 bg-white flex flex-col h-screen overflow-y-auto">
+        <div className="xl:col-span-4 bg-white flex flex-col sticky top-[73px] h-[calc(100vh-73px)] overflow-y-auto">
           
-          <div className="p-10 border-b border-slate-50">
-            <div className="flex flex-col items-center text-center mb-10">
-              <div className="relative mb-6">
-                <img 
-                  src={activePersona.avatar} 
-                  alt={activePersona.name} 
-                  className="w-36 h-36 rounded-[2.5rem] object-cover border-4 border-white shadow-2xl" 
-                />
-              </div>
-              <h4 className="text-2xl font-bold text-slate-900 mb-1">{activePersona.name}</h4>
-              <p className="text-xs text-slate-400 font-bold uppercase tracking-[0.3em]">{activePersona.role}</p>
+          <div className="p-6 border-b border-slate-100">
+            <div className="flex flex-col items-center text-center mb-6">
+              <img 
+                src={activePersona.avatar} 
+                alt={activePersona.name} 
+                className="w-24 h-24 rounded-2xl object-cover shadow-card mb-4" 
+              />
+              <h4 className="text-lg font-bold text-slate-900">{activePersona.name}</h4>
+              <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">{activePersona.role}</p>
               {activePersona.focusAreas && (
-                <div className="flex flex-wrap justify-center gap-2 mt-4">
+                <div className="flex flex-wrap justify-center gap-1.5 mt-3">
                   {activePersona.focusAreas.map((area, idx) => (
-                    <span key={idx} className="text-xs px-3 py-1 rounded-full bg-slate-100 text-slate-600 font-medium">
+                    <span key={idx} className="text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 font-medium">
                       {area}
                     </span>
                   ))}
                 </div>
               )}
             </div>
-            
-            <div className="space-y-4">
-              <div className="bg-slate-50 rounded-2xl p-6">
-                <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-2">Primary Market</p>
-                <p className="text-lg text-slate-900 font-semibold">{activePersona.demographics.segment}</p>
-              </div>
-              <div className="bg-slate-50 rounded-2xl p-6">
-                <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-2">Reviewer Profile</p>
-                <p className="text-sm text-slate-600 leading-relaxed">"{activePersona.demographics.background}"</p>
-              </div>
+          </div>
+
+          <div className="px-6 py-3 border-b border-slate-100">
+            <div className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
+              <button
+                onClick={() => setRightPanelTab('profile')}
+                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-all ${
+                  rightPanelTab === 'profile' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+                }`}
+              >
+                Profile
+              </button>
+              <button
+                onClick={() => setRightPanelTab('goals')}
+                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-all ${
+                  rightPanelTab === 'goals' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+                }`}
+              >
+                Goals ({activeReport.answers.length})
+              </button>
             </div>
           </div>
 
-          <div className="p-10 space-y-12">
-            <h3 className="text-xs font-black uppercase tracking-[0.4em] text-slate-300">Target Response Data</h3>
-            
-            <div className="space-y-12">
-              {activeReport.answers.map((qa, i) => (
-                <div key={i} className="group">
-                  <div className="mb-4">
-                    <div className="flex items-center gap-3 mb-2">
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Goal 0{i+1}</span>
+          <div className="flex-1 p-6 overflow-y-auto">
+            {rightPanelTab === 'profile' && (
+              <div className="space-y-4">
+                <Card className="p-4">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Primary Market</p>
+                  <p className="text-base text-slate-900 font-semibold">{activePersona.demographics.segment}</p>
+                </Card>
+                <Card className="p-4">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Background</p>
+                  <p className="text-sm text-slate-600 leading-relaxed">"{activePersona.demographics.background}"</p>
+                </Card>
+              </div>
+            )}
+
+            {rightPanelTab === 'goals' && (
+              <div className="space-y-4">
+                {activeReport.answers.map((qa, i) => (
+                  <Card key={i} className="p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Goal {i + 1}</span>
                     </div>
-                    <h4 className="text-xl font-bold text-slate-900 tracking-tight leading-snug">{qa.question}</h4>
-                  </div>
-                  <div className="p-8 bg-slate-50 rounded-3xl border border-slate-100 group-hover:bg-white group-hover:shadow-lg transition-all">
-                    <p className="text-base text-slate-600 leading-relaxed">
-                      "{qa.answer}"
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
+                    <h4 className="text-sm font-semibold text-slate-900 mb-3 leading-snug">{qa.question}</h4>
+                    <p className="text-sm text-slate-600 leading-relaxed">"{qa.answer}"</p>
+                  </Card>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </main>

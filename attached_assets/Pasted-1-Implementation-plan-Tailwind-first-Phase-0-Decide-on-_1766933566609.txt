@@ -1,0 +1,212 @@
+1) Implementation plan (Tailwind-first)
+Phase 0: Decide on a density + type baseline (1 hour)
+
+Pick one of these and apply globally:
+
+Comfortable (recommended for filmmakers + CJK):
+
+Base font: text-[17px] (EN) / text-[18px] (繁中 if you see thinness)
+
+Line height: leading-7 (or leading-[1.75])
+
+Section headers: text-xl font-semibold
+
+Card titles: text-base font-semibold
+
+Goal: readable, not sparse.
+
+Phase 1: Add Tailwind tokens (0.5–1 day)
+
+In tailwind.config.ts, add:
+
+font family stack that supports Traditional Chinese well
+
+a small set of radii
+
+consistent shadows
+
+neutral borders
+
+a spacing policy (you’ll implement via class discipline, not config)
+
+Deliverable: “design tokens” that every component uses.
+
+Example tailwind.config.ts additions (agent-ready)
+// tailwind.config.ts
+import type { Config } from "tailwindcss";
+
+export default {
+  theme: {
+    extend: {
+      fontFamily: {
+        sans: [
+          "Inter",
+          "Noto Sans TC",
+          "ui-sans-serif",
+          "system-ui",
+          "sans-serif",
+        ],
+      },
+      borderRadius: {
+        xl: "16px",
+        "2xl": "20px",
+      },
+      boxShadow: {
+        soft: "0 1px 2px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.06)",
+        card: "0 1px 2px rgba(0,0,0,0.06), 0 12px 40px rgba(15,23,42,0.08)",
+      },
+      colors: {
+        // Optional: define a small semantic palette if you’re not using CSS vars
+        ink: {
+          900: "#0B1220",
+          700: "#263044",
+          500: "#556070",
+        },
+      },
+    },
+  },
+} satisfies Config;
+
+Phase 2: Global typography + density pass (0.5–1 day)
+
+Add a global base style (in your main CSS, e.g., index.css):
+
+@layer base {
+  html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+  body { @apply font-sans text-[17px] leading-[1.75] text-slate-800 bg-slate-50; }
+}
+
+
+Then apply these principles:
+
+Replace text-sm body copy with text-[15px] for secondary, text-[17px] for primary
+
+Reduce empty vertical spacing:
+
+replace many gap-8 with gap-4 or gap-5
+
+replace many py-10 with py-6 etc. inside sections
+
+Phase 3: Standardize 6 core UI primitives (1–2 days)
+
+Create ui/ components with Tailwind classes so everything feels unified.
+
+Build these:
+
+Card
+
+SectionHeader
+
+Badge (timestamp)
+
+Pill (category tag)
+
+SeverityPill
+
+Panel (right column blocks)
+
+Use clsx + tailwind-merge for variants.
+
+Key outcome: you stop manually styling every card and fix “inconsistent modernness.”
+
+Phase 4: Layout tightening (1 day)
+
+Keep your layout concept, but do these changes:
+
+Use a consistent grid:
+
+grid grid-cols-12 gap-6
+
+left: col-span-8
+
+right: col-span-4
+
+Make right panel sticky:
+
+sticky top-6 max-h-[calc(100vh-3rem)] overflow-auto
+
+Convert right “Target response data” into:
+
+Tabs: Goals | Profile | Summary
+or an Accordion for goals.
+
+This reduces the “two long scroll columns” feeling.
+
+2) Concrete UI fixes I’d instruct your agent to implement
+A) Make the UI less sparse without clutter
+
+Reduce card padding: p-6 → p-5 (or p-4 for dense)
+
+Reduce vertical gaps: gap-8 → gap-5
+
+Increase body font size: text-sm → text-[15px] for secondary; text-[17px] for primary
+
+Stronger heading scale:
+
+“Executive Summary”: text-lg font-semibold
+
+Section labels (“HIGHLIGHTS”): text-xs tracking-widest uppercase text-slate-500
+
+B) Redesign the highlight/concern card header row
+
+Current cards are clean but visually flat. Add a standard header bar:
+
+Left: timestamp badge
+
+Middle: category pill
+
+Right: severity pill (concerns only)
+
+This improves scanability and density.
+
+C) Add “Expand” (progressive disclosure)
+
+Default card content should be 2–3 lines, with “Expand” to read more. This prevents the page from looking empty and reduces scroll.
+
+D) Give the Executive Summary more presence
+
+Right now it reads like a plain text block.
+
+Make it a Card
+
+Add a small “Key takeaway” line at top (1 sentence)
+
+Use better line-height and slightly larger text
+
+E) Add subtle section framing
+
+To make it feel modern:
+
+Use bg-white/70 backdrop-blur (optional)
+
+Use border border-slate-200/70
+
+Use consistent shadow shadow-card
+
+3) A “coding agent brief” you can paste
+
+Objective: Improve typography hierarchy, reduce excess whitespace, unify components using Tailwind tokens, and tighten layout while keeping the existing information architecture.
+
+Tasks:
+
+Add Tailwind design tokens (font stack with Noto Sans TC, radius, shadows, border color) in tailwind.config.
+
+Set global base typography in index.css: text-[17px] leading-[1.75]. Ensure Traditional Chinese reads comfortably.
+
+Refactor core UI primitives into reusable components: Card, Badge, Pill, SeverityPill, SectionHeader, Panel using Tailwind + variants.
+
+Refactor highlight/concern cards to a single component with consistent header row and “Expand” disclosure.
+
+Tighten spacing: reduce common gap-* and p-* values by ~20–30% inside cards/sections while keeping outer page margins.
+
+Make right column sticky with internal scroll and convert “Target response data” into Tabs or Accordion to reduce vertical sprawl.
+
+Definition of done:
+
+Typography feels clearly tiered (header > card title > body > labels)
+
+UI looks denser but still calm
+
+Right column no longer forces a second long scroll
+
+Visual system is consistent: same radii, borders, shadows, pill styles everywhere
