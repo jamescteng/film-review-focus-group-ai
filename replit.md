@@ -57,8 +57,10 @@ The app uses an on-demand approach for cost efficiency:
   - Concern categories (e.g., pacing, clarity, character, audio, visual, tone, emotional_distance)
   - Minimum high-severity concern threshold
 - Available personas:
-  - `acquisitions_director` (Sarah Chen) - Commercial viability, pacing, marketability focus
-  - `cultural_editor` (Maya Lin) - Cultural relevance, emotional resonance, authorship focus
+  - `acquisitions_director` - Commercial viability, pacing, marketability focus
+  - `cultural_editor` - Cultural relevance, emotional resonance, authorship focus
+  - `mass_audience_viewer` - Clarity, engagement, drop-off risk focus
+  - `social_impact_viewer` - Message clarity, ethical storytelling, trust focus
 - Error isolation: individual persona failures don't block other results
 
 ### API Endpoints

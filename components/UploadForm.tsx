@@ -194,6 +194,17 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onStart }) => {
                       )}
                     </div>
                     <p className="text-xs text-slate-500 font-medium">{persona.role}</p>
+                    {persona.focusAreas && (
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {persona.focusAreas.map((area, idx) => (
+                          <span key={idx} className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                            isSelected ? 'bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-500'
+                          }`}>
+                            {area}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     <p className="text-xs text-slate-400 mt-2 line-clamp-2">{persona.description}</p>
                   </div>
                 </button>

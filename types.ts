@@ -7,6 +7,7 @@ export interface Persona {
   instruction: string;
   avatar: string;
   color: string;
+  focusAreas?: string[];
   demographics: {
     age: string;
     segment: string;

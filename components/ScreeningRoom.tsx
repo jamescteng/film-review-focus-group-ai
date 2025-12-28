@@ -35,7 +35,21 @@ const getCategoryIcon = (category: string) => {
     cultural_relevance: '🌍',
     emotional_distance: '💔',
     originality: '🎯',
-    cultural_resonance: '🌐'
+    cultural_resonance: '🌐',
+    emotional_pull: '❤️',
+    relatability: '🤝',
+    confusion: '❓',
+    pacing_drag: '🐌',
+    stakes_unclear: '🎯',
+    message_clarity: '📢',
+    emotional_authenticity: '💯',
+    ethical_storytelling: '⚖️',
+    impact_potential: '🚀',
+    message_confusion: '🌫️',
+    ethical_tension: '⚠️',
+    emotional_manipulation: '🎭',
+    lack_of_context: '📋',
+    trust_gap: '🔓'
   };
   return icons[category] || '📌';
 };
@@ -160,6 +174,15 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-slate-900 leading-tight">{persona.name}</p>
                       <p className="text-xs text-slate-500 mt-0.5">{persona.role}</p>
+                      {persona.focusAreas && (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {persona.focusAreas.map((area, idx) => (
+                            <span key={idx} className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-medium">
+                              {area}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                       <svg className="w-4 h-4 text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -294,6 +317,15 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
               </div>
               <h4 className="text-3xl font-serif text-slate-900 mb-1">{activePersona.name}</h4>
               <p className="text-xs text-slate-400 font-bold uppercase tracking-[0.3em]">{activePersona.role}</p>
+              {activePersona.focusAreas && (
+                <div className="flex flex-wrap justify-center gap-2 mt-4">
+                  {activePersona.focusAreas.map((area, idx) => (
+                    <span key={idx} className="text-xs px-3 py-1 rounded-full bg-slate-100 text-slate-600 font-medium">
+                      {area}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
             
             <div className="space-y-4">
