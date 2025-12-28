@@ -40,6 +40,31 @@ HOUSE STYLE REMINDER:
 - Respond strictly in ${langName}.
 `;
 
+const SUMMARY_READABILITY_GUIDELINES = `
+SUMMARY READABILITY GUIDELINES (STRICT):
+
+This summary will be read on a screen inside a working tool, not as a long-form essay.
+
+Write in a clear, human, and readable rhythm.
+
+- Use short paragraphs (2–3 sentences per paragraph).
+- Most sentences should be under 25 words.
+- No paragraph may exceed 3 sentences.
+- Avoid stacking multiple abstract ideas in a single sentence.
+- Prefer concrete observations and emotional clarity over dense theoretical language.
+- White space is part of readability — allow the text to breathe.
+
+The tone should feel like a thoughtful post-screening reflection shared with a peer,
+not an academic essay, press release, or festival catalog description.
+
+AVOID:
+- Overly long sentences with multiple clauses, em dashes, or semicolons.
+- Academic or curatorial jargon unless absolutely necessary.
+- Dense conceptual framing that slows reading on screen.
+
+If a sentence feels heavy or difficult to read silently, rewrite it.
+`;
+
 function withHouseStyle(persona: PersonaConfig): PersonaConfig {
   return {
     ...persona,
@@ -88,6 +113,8 @@ CONTEXTUAL DIALOGUE: ${srtContent.substring(0, 5000)}
 GOALS
 
 Executive critical summary (300–500 words).
+
+${SUMMARY_READABILITY_GUIDELINES}
 
 Write this as an internal acquisitions decision memo.
 
@@ -206,6 +233,8 @@ CONTEXTUAL DIALOGUE: ${srtContent.substring(0, 5000)}
 GOALS
 
 Personal viewing reflection (300–500 words).
+
+${SUMMARY_READABILITY_GUIDELINES}
 
 Write this in first person, as if reflecting immediately after watching.
 
@@ -333,6 +362,8 @@ GOALS
 
 Honest viewer reaction (300–500 words).
 
+${SUMMARY_READABILITY_GUIDELINES}
+
 Write this in first person, as a regular viewer reflecting after watching.
 
 Focus on whether the film is easy to follow and emotionally engaging.
@@ -456,6 +487,8 @@ CONTEXTUAL DIALOGUE: ${srtContent.substring(0, 5000)}
 GOALS
 
 Thoughtful impact reflection (300–500 words).
+
+${SUMMARY_READABILITY_GUIDELINES}
 
 Write this as a viewer who cares about the issue and wants the film to succeed.
 
