@@ -142,6 +142,17 @@ Autoscale deployment - builds frontend with Vite, serves via Express backend.
 - Full error details logged server-side only
 
 ## Recent Changes
+- **UI Design System Overhaul**:
+  - Inter + Noto Sans TC font stack (better CJK support)
+  - Reusable UI component library: Card, Badge, Pill, SeverityPill, Tabs, SectionHeader
+  - Consistent shadows (soft, card, elevated) and radii
+  - Tighter spacing and improved density
+- **ScreeningRoom Tabbed Interface**:
+  - Summary is now the first/default tab (renamed from Executive Summary)
+  - Tabbed navigation: Summary | Highlights | Concerns
+  - Expandable card content with "Read more" disclosure
+  - Right sidebar is sticky with Profile | Goals tabs
+  - Consistent header row pattern (timestamp | category | severity)
 - **Streaming upload with Busboy**: Replaced multer with Busboy streaming parser for more efficient large file handling
 - **Spool-first architecture**: Stream to temp file with backpressure, then upload to Gemini with exact file size (fixes Content-Length issues)
 - **Improved error handling**: Invalid MIME types and oversized files return 400; disk/upload errors return 500
@@ -154,4 +165,3 @@ Autoscale deployment - builds frontend with Vite, serves via Express backend.
 - Reports are cached in state - switching between personas is instant
 - State properly resets when starting a new screening
 - Removed dialogue/SRT input field; srtContent now optional
-- UI refresh: Work Sans font throughout, updated copy, tightened layout
