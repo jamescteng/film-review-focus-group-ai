@@ -6,7 +6,9 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { fileURLToPath } from 'url';
-import multer from 'multer';
+import { Readable, PassThrough } from 'stream';
+import { pipeline } from 'stream/promises';
+import Busboy from 'busboy';
 import rateLimit from 'express-rate-limit';
 import { GoogleGenAI, Type, createPartFromUri } from "@google/genai";
 import { getPersonaById, getAllPersonas, PersonaConfig } from './personas.js';
@@ -147,10 +149,7 @@ function sleepWithJitter(baseDelayMs: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, delay));
 }
 
-const upload = multer({
-  dest: os.tmpdir(),
-  limits: { fileSize: MAX_VIDEO_SIZE_BYTES }
-});
+// Streaming upload - no longer using multer for disk buffering
 
 if (isProduction) {
   app.use(express.static(path.join(__dirname, '../dist')));
@@ -354,53 +353,332 @@ async function uploadFileWithResumable(filePath: string, mimeType: string, displ
   };
 }
 
-const handleMulterError = (err: any, req: any, res: any, next: any) => {
-  if (err) {
-    // SECURITY: Log full error internally, return generic message to client
-    FocalPointLogger.error("Multer", err);
-    if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(413).json({ error: `File too large. Maximum size is ${MAX_VIDEO_SIZE_MB}MB.` });
+interface StreamingUploadState {
+  bytesReceived: number;
+  bytesAckedToGemini: number;
+  uploadUrl: string | null;
+  spoolPath: string;
+  spoolFd: number | null;
+  geminiOffset: number;
+  fileSize: number;
+  mimeType: string;
+  displayName: string;
+}
+
+async function initGeminiResumableSession(
+  fileSize: number,
+  mimeType: string,
+  displayName: string
+): Promise<string> {
+  const apiKey = getApiKey();
+  
+  FocalPointLogger.info("Resumable_Init", { fileSize, mimeType, displayName });
+
+  const initResponse = await fetch(
+    `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: {
+        "X-Goog-Upload-Protocol": "resumable",
+        "X-Goog-Upload-Command": "start",
+        "X-Goog-Upload-Header-Content-Length": fileSize.toString(),
+        "X-Goog-Upload-Header-Content-Type": mimeType,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        file: { displayName }
+      }),
     }
-    return res.status(500).json({ error: "Upload error. Please try again." });
+  );
+
+  if (!initResponse.ok) {
+    const errorText = await initResponse.text();
+    throw new Error(`Failed to initialize resumable upload: ${initResponse.status} - ${errorText}`);
   }
-  next();
-};
 
-app.post('/api/upload', uploadLimiter, upload.single('video'), handleMulterError, async (req, res) => {
-  logMem('upload_start');
-  try {
-    const file = req.file;
-    if (!file) {
-      return res.status(400).json({ error: "No video file provided." });
-    }
+  const uploadUrl = initResponse.headers.get("x-goog-upload-url");
+  if (!uploadUrl) {
+    throw new Error("Failed to get resumable upload URL from response headers");
+  }
 
-    // SECURITY: Validate MIME type is video
-    if (!ALLOWED_VIDEO_MIMES.includes(file.mimetype) && !file.mimetype.startsWith('video/')) {
-      fs.unlink(file.path, () => {});
-      FocalPointLogger.warn("Upload_Rejected", `Invalid MIME type: ${file.mimetype}`);
-      return res.status(400).json({ error: "Invalid file type. Only video files are accepted." });
+  FocalPointLogger.info("Resumable_URL", "Got upload URL for streaming upload");
+  return uploadUrl;
+}
+
+async function uploadChunkToGemini(
+  uploadUrl: string,
+  chunk: Buffer,
+  offset: number,
+  isLastChunk: boolean,
+  totalSize: number
+): Promise<{ newOffset: number; finalResult?: any }> {
+  const uploadCommand = isLastChunk ? "upload, finalize" : "upload";
+  
+  const uploadResponse = await fetch(uploadUrl, {
+    method: "POST",
+    headers: {
+      "Content-Length": chunk.length.toString(),
+      "X-Goog-Upload-Offset": offset.toString(),
+      "X-Goog-Upload-Command": uploadCommand,
+    },
+    body: chunk,
+  });
+
+  const sizeReceived = uploadResponse.headers.get("x-goog-upload-size-received");
+  const uploadStatus = uploadResponse.headers.get("x-goog-upload-status");
+
+  if (isLastChunk) {
+    if (!uploadResponse.ok) {
+      const errorText = await uploadResponse.text();
+      throw new Error(`Final chunk upload failed: ${uploadResponse.status} - ${errorText}`);
     }
     
-    logMem('after_multer');
-    console.log('[FocalPoint] Received file from client, starting resumable upload to Gemini...');
+    let finalResult: any = null;
+    const responseText = await uploadResponse.text();
+    if (responseText && responseText.trim()) {
+      try {
+        finalResult = JSON.parse(responseText);
+        FocalPointLogger.info("Upload_Finalized", { fileName: finalResult.file?.name, status: uploadStatus });
+      } catch (e) {
+        FocalPointLogger.warn("Parse_Warning", `Could not parse final response`);
+      }
+    }
+    
+    return { newOffset: offset + chunk.length, finalResult };
+  } else {
+    if (uploadResponse.status !== 200 && uploadResponse.status !== 308) {
+      const errorText = await uploadResponse.text();
+      throw new Error(`Chunk upload failed: ${uploadResponse.status} - ${errorText}`);
+    }
+    
+    let serverOffset = offset + chunk.length;
+    if (sizeReceived) {
+      serverOffset = parseInt(sizeReceived, 10);
+    }
+    
+    return { newOffset: serverOffset };
+  }
+}
 
-    const fileSizeMB = (file.size / 1024 / 1024).toFixed(2);
-    FocalPointLogger.info("Upload_Start", { name: file.originalname, size: `${fileSizeMB} MB` });
+async function uploadFromSpoolFile(
+  spoolPath: string,
+  uploadUrl: string,
+  startOffset: number,
+  totalSize: number
+): Promise<{ name: string; uri: string }> {
+  const CHUNK_SIZE = 16 * 1024 * 1024;
+  const CHUNK_GRANULARITY = 256 * 1024;
+  
+  FocalPointLogger.info("Spool_Resume", { startOffset, totalSize, spoolPath });
+  
+  let offset = startOffset;
+  const fd = fs.openSync(spoolPath, 'r');
+  let finalResult: any = null;
 
-    const uploadedFile = await uploadFileWithResumable(
-      file.path,
-      file.mimetype,
-      file.originalname || 'video'
-    );
+  try {
+    while (offset < totalSize) {
+      const remainingBytes = totalSize - offset;
+      const isLastChunk = remainingBytes <= CHUNK_SIZE;
+      
+      let currentChunkSize: number;
+      if (isLastChunk) {
+        currentChunkSize = remainingBytes;
+      } else {
+        currentChunkSize = Math.floor(CHUNK_SIZE / CHUNK_GRANULARITY) * CHUNK_GRANULARITY;
+      }
+      
+      const buffer = Buffer.alloc(currentChunkSize);
+      fs.readSync(fd, buffer, 0, currentChunkSize, offset);
 
-    FocalPointLogger.info("Upload_Complete", { name: uploadedFile.name, uri: uploadedFile.uri });
+      const progressPercent = Math.round(((offset + currentChunkSize) / totalSize) * 100);
+      FocalPointLogger.info("Spool_Chunk", `Uploading from spool: ${progressPercent}%`);
+
+      const result = await uploadChunkToGemini(uploadUrl, buffer, offset, isLastChunk, totalSize);
+      
+      if (result.finalResult?.file) {
+        finalResult = result.finalResult;
+      }
+      
+      offset = result.newOffset;
+    }
+  } finally {
+    fs.closeSync(fd);
+  }
+
+  if (!finalResult?.file) {
+    throw new Error("Spool upload completed but could not retrieve file info");
+  }
+
+  return {
+    name: finalResult.file.name,
+    uri: finalResult.file.uri
+  };
+}
+
+app.post('/api/upload', uploadLimiter, async (req, res) => {
+  logMem('upload_start');
+  
+  let spoolPath: string | null = null;
+  let spoolWriteStream: fs.WriteStream | null = null;
+  
+  try {
+    const contentType = req.headers['content-type'];
+    if (!contentType || !contentType.includes('multipart/form-data')) {
+      return res.status(400).json({ error: "Invalid request format. Expected multipart/form-data." });
+    }
+
+    const busboy = Busboy({ 
+      headers: req.headers,
+      limits: { fileSize: MAX_VIDEO_SIZE_BYTES }
+    });
+
+    let fileProcessed = false;
+    let uploadError: Error | null = null;
+    let finalUploadResult: { name: string; uri: string } | null = null;
+    let fileMimeType: string = '';
+    let fileDisplayName: string = '';
+
+    const uploadPromise = new Promise<void>((resolve, reject) => {
+      busboy.on('file', async (fieldname, fileStream, info) => {
+        if (fieldname !== 'video') {
+          fileStream.resume();
+          return;
+        }
+
+        fileProcessed = true;
+        const { filename, mimeType } = info;
+        fileMimeType = mimeType;
+        fileDisplayName = filename || 'video';
+
+        if (!ALLOWED_VIDEO_MIMES.includes(mimeType) && !mimeType.startsWith('video/')) {
+          FocalPointLogger.warn("Upload_Rejected", `Invalid MIME type: ${mimeType}`);
+          uploadError = new Error("Invalid file type. Only video files are accepted.");
+          fileStream.resume();
+          fileStream.on('end', () => resolve());
+          fileStream.on('error', () => resolve());
+          return;
+        }
+
+        FocalPointLogger.info("Stream_Start", { filename, mimeType });
+
+        spoolPath = path.join(os.tmpdir(), `focalpoint-spool-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+        spoolWriteStream = fs.createWriteStream(spoolPath, { highWaterMark: 16 * 1024 * 1024 });
+
+        let bytesReceived = 0;
+        let uploadUrl: string | null = null;
+        let streamEnded = false;
+        let spoolError: Error | null = null;
+
+        spoolWriteStream.on('error', (err) => {
+          FocalPointLogger.error("Spool_Write_Error", err);
+          spoolError = err;
+          fileStream.destroy(err);
+        });
+
+        spoolWriteStream.on('drain', () => {
+          fileStream.resume();
+        });
+
+        fileStream.on('data', (chunk: Buffer) => {
+          if (spoolError) return;
+          
+          bytesReceived += chunk.length;
+          const canContinue = spoolWriteStream!.write(chunk);
+          
+          if (!canContinue) {
+            fileStream.pause();
+          }
+          
+          if (bytesReceived % (50 * 1024 * 1024) < chunk.length) {
+            FocalPointLogger.info("Stream_Progress", { 
+              bytesReceived: Math.round(bytesReceived / 1024 / 1024) + 'MB'
+            });
+          }
+        });
+
+        fileStream.on('end', async () => {
+          streamEnded = true;
+          
+          if (spoolError || uploadError) {
+            if (spoolWriteStream) {
+              spoolWriteStream.destroy();
+            }
+            resolve();
+            return;
+          }
+          
+          try {
+            await new Promise<void>((resolveWrite, rejectWrite) => {
+              spoolWriteStream!.end(() => resolveWrite());
+              spoolWriteStream!.once('error', rejectWrite);
+            });
+            
+            FocalPointLogger.info("Spool_Complete", { totalBytes: bytesReceived, spoolPath });
+            
+            uploadUrl = await initGeminiResumableSession(bytesReceived, mimeType, fileDisplayName);
+            
+            finalUploadResult = await uploadFromSpoolFile(spoolPath!, uploadUrl, 0, bytesReceived);
+            
+            FocalPointLogger.info("Upload_Success", { 
+              bytesReceived, 
+              fileName: finalUploadResult.name 
+            });
+            
+            resolve();
+            
+          } catch (err: any) {
+            FocalPointLogger.error("Upload_Error", err.message);
+            reject(err);
+          }
+        });
+
+        fileStream.on('error', (err) => {
+          FocalPointLogger.error("Stream_Error", err);
+          reject(err);
+        });
+
+        fileStream.on('limit', () => {
+          FocalPointLogger.warn("Stream_Limit", `File exceeded ${MAX_VIDEO_SIZE_MB}MB limit`);
+          uploadError = new Error(`File too large. Maximum size is ${MAX_VIDEO_SIZE_MB}MB.`);
+        });
+      });
+
+      busboy.on('finish', () => {
+        if (!fileProcessed) {
+          reject(new Error("No video file provided."));
+        }
+      });
+
+      busboy.on('error', (err) => {
+        FocalPointLogger.error("Busboy_Error", err);
+        reject(err);
+      });
+    });
+
+    req.pipe(busboy);
+    
+    await uploadPromise;
+
+    if (uploadError) {
+      if (spoolPath) fs.unlink(spoolPath, () => {});
+      const isValidationError = uploadError.message.includes("Invalid file type") || 
+                                 uploadError.message.includes("too large");
+      const statusCode = isValidationError ? 400 : 500;
+      return res.status(statusCode).json({ error: uploadError.message });
+    }
+
+    if (!finalUploadResult) {
+      if (spoolPath) fs.unlink(spoolPath, () => {});
+      return res.status(500).json({ error: "Upload failed. Please try again." });
+    }
+
+    FocalPointLogger.info("Upload_Complete", { name: finalUploadResult.name, uri: finalUploadResult.uri });
 
     const ai = getAI();
-    let fileInfo = await ai.files.get({ name: uploadedFile.name });
+    let fileInfo = await ai.files.get({ name: finalUploadResult.name });
 
     if (fileInfo.state === "FAILED") {
-      fs.unlink(file.path, () => {});
-      // SECURITY: Log full error internally, return generic message to client
+      if (spoolPath) fs.unlink(spoolPath, () => {});
       const errorMsg = (fileInfo as any).error?.message ?? "unknown error";
       FocalPointLogger.error("Processing_Failed", errorMsg);
       return res.status(500).json({ 
@@ -416,8 +694,7 @@ app.post('/api/upload', uploadLimiter, upload.single('video'), handleMulterError
       const elapsedMs = Date.now() - startTime;
 
       if (elapsedMs > MAX_WAIT_MS) {
-        fs.unlink(file.path, () => {});
-        // SECURITY: Log timeout internally, return generic message to client
+        if (spoolPath) fs.unlink(spoolPath, () => {});
         FocalPointLogger.warn("Processing_Timeout", `Timed out after ${Math.round(elapsedMs / 1000)}s`);
         return res.status(500).json({ 
           error: "Video processing timed out. Please try a shorter or smaller video." 
@@ -426,16 +703,15 @@ app.post('/api/upload', uploadLimiter, upload.single('video'), handleMulterError
 
       FocalPointLogger.info(
         "Processing",
-        `Waiting for video processing… attempt=${attempt + 1}, elapsed=${Math.round(elapsedMs / 1000)}s, nextDelay=${Math.round(delayMs)}ms`
+        `Waiting for video processing… attempt=${attempt + 1}, elapsed=${Math.round(elapsedMs / 1000)}s`
       );
 
       await sleepWithJitter(delayMs);
 
-      fileInfo = await ai.files.get({ name: uploadedFile.name });
+      fileInfo = await ai.files.get({ name: finalUploadResult.name });
 
       if (fileInfo.state === "FAILED") {
-        fs.unlink(file.path, () => {});
-        // SECURITY: Log full error internally, return generic message to client
+        if (spoolPath) fs.unlink(spoolPath, () => {});
         const errorMsg = (fileInfo as any).error?.message ?? "unknown error";
         FocalPointLogger.error("Processing_Failed", errorMsg);
         return res.status(500).json({ 
@@ -447,24 +723,21 @@ app.post('/api/upload', uploadLimiter, upload.single('video'), handleMulterError
       attempt++;
     }
 
-    fs.unlink(file.path, () => {});
+    if (spoolPath) fs.unlink(spoolPath, () => {});
 
     FocalPointLogger.info("Processing_Complete", { state: fileInfo.state });
     logMem('upload_complete');
 
     res.json({
       fileUri: fileInfo.uri,
-      fileMimeType: file.mimetype,
-      fileName: uploadedFile.name
+      fileMimeType: fileMimeType,
+      fileName: finalUploadResult.name
     });
 
   } catch (error: any) {
     logMem('upload_error');
     FocalPointLogger.error("Upload", error);
-    if (req.file?.path) {
-      fs.unlink(req.file.path, () => {});
-    }
-    // SECURITY: Log full error internally, return generic message to client
+    if (spoolPath) fs.unlink(spoolPath, () => {});
     res.status(500).json({ error: "Upload failed. Please try again." });
   }
 });
