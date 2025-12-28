@@ -91,7 +91,7 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
     <div className="min-h-screen bg-[#fcfcfc] flex flex-col text-slate-900">
       <header className="border-b border-slate-100 px-8 py-8 flex justify-between items-center bg-white/90 backdrop-blur-2xl sticky top-0 z-40">
         <div>
-          <h2 className="text-3xl font-serif text-slate-900 tracking-tight">{project.title}</h2>
+          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">{project.title}</h2>
           <div className="flex items-center gap-3 mt-1">
             <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
             <p className="text-[10px] text-slate-400 uppercase tracking-[0.2em] font-bold">
@@ -259,7 +259,7 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
                       </span>
                     </div>
                     <p className="text-lg text-slate-800 leading-relaxed font-medium mb-3">{h.summary}</p>
-                    <p className="text-sm text-slate-500 leading-relaxed italic">{h.why_it_works}</p>
+                    <p className="text-sm text-slate-500 leading-relaxed">{h.why_it_works}</p>
                   </button>
                 ))}
               </div>
@@ -297,7 +297,7 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
           </section>
 
           <section className="bg-slate-50 p-12 md:p-16 rounded-[3.5rem] border border-slate-100">
-            <h3 className="text-2xl font-serif text-slate-900 mb-10 border-b border-slate-200 pb-8">Executive Summary</h3>
+            <h3 className="text-xl font-bold text-slate-900 mb-8 border-b border-slate-200 pb-6">Executive Summary</h3>
             <div className="max-w-none text-slate-700 leading-[2.1] text-xl font-light">
               {(activeReport.executive_summary || '').split('\n').map((para, i) => <p key={i} className="mb-8">{para}</p>)}
             </div>
@@ -315,7 +315,7 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
                   className="w-36 h-36 rounded-[2.5rem] object-cover border-4 border-white shadow-2xl" 
                 />
               </div>
-              <h4 className="text-3xl font-serif text-slate-900 mb-1">{activePersona.name}</h4>
+              <h4 className="text-2xl font-bold text-slate-900 mb-1">{activePersona.name}</h4>
               <p className="text-xs text-slate-400 font-bold uppercase tracking-[0.3em]">{activePersona.role}</p>
               {activePersona.focusAreas && (
                 <div className="flex flex-wrap justify-center gap-2 mt-4">
@@ -335,7 +335,7 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
               </div>
               <div className="bg-slate-50 rounded-2xl p-6">
                 <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-2">Reviewer Profile</p>
-                <p className="text-base text-slate-600 leading-relaxed font-light italic">"{activePersona.demographics.background}"</p>
+                <p className="text-sm text-slate-600 leading-relaxed">"{activePersona.demographics.background}"</p>
               </div>
             </div>
           </div>
@@ -353,7 +353,7 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
                     <h4 className="text-xl font-bold text-slate-900 tracking-tight leading-snug">{qa.question}</h4>
                   </div>
                   <div className="p-8 bg-slate-50 rounded-3xl border border-slate-100 group-hover:bg-white group-hover:shadow-lg transition-all">
-                    <p className="text-lg text-slate-600 leading-relaxed font-light italic">
+                    <p className="text-base text-slate-600 leading-relaxed">
                       "{qa.answer}"
                     </p>
                   </div>

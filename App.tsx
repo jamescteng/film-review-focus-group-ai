@@ -116,7 +116,7 @@ const App: React.FC = () => {
           <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center rotate-12 shadow-xl transition-transform group-hover:rotate-0">
             <div className="w-5 h-5 bg-white rounded-lg -rotate-12 group-hover:rotate-0 transition-transform" />
           </div>
-          <span className="font-serif text-4xl tracking-tighter italic font-bold">FocalPoint</span>
+          <span className="text-3xl tracking-tight font-bold">FocalPoint</span>
         </div>
       </nav>
 
@@ -124,7 +124,7 @@ const App: React.FC = () => {
         {state === AppState.IDLE && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
             {errorMessage && (
-              <div className="max-w-4xl mx-auto mt-24 p-10 bg-rose-50 border border-rose-200 rounded-[2.5rem] text-rose-700 text-xl text-center font-serif italic">
+              <div className="max-w-4xl mx-auto mt-24 p-10 bg-rose-50 border border-rose-200 rounded-[2.5rem] text-rose-700 text-xl text-center font-medium">
                 {errorMessage}
               </div>
             )}

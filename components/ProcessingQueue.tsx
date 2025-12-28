@@ -18,8 +18,8 @@ export const ProcessingQueue: React.FC<ProcessingQueueProps> = ({ personas, curr
           <span className="w-2 h-2 rounded-full bg-black animate-ping" />
           Active Multi-Modal Pass
         </div>
-        <h2 className="text-7xl font-serif mb-10 text-black leading-tight tracking-tight">
-          {currentPersona.name} <br/> <span className="text-zinc-300 italic">is reviewing the edit.</span>
+        <h2 className="text-5xl md:text-6xl font-bold mb-10 text-black leading-tight tracking-tight">
+          {currentPersona.name} <br/> <span className="text-zinc-300 font-medium">is reviewing your film.</span>
         </h2>
         <p className="text-zinc-400 text-2xl max-w-lg mx-auto leading-relaxed font-light">
           Parsing temporal cues, performance nuance, and visual semantics...
@@ -42,7 +42,7 @@ export const ProcessingQueue: React.FC<ProcessingQueueProps> = ({ personas, curr
             className="relative w-48 h-48 rounded-[3.5rem] object-cover border-8 border-white shadow-[0_30px_60px_rgba(0,0,0,0.1)] mb-8" 
           />
         </div>
-        <span className="text-2xl font-serif italic text-black">{currentPersona.role}</span>
+        <span className="text-xl font-semibold text-black">{currentPersona.role}</span>
         <span className="text-xs text-zinc-400 uppercase tracking-[0.3em] mt-3 font-black">Status: Inspecting Frame Buffer</span>
       </div>
     </div>

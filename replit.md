@@ -20,6 +20,7 @@ FocalPoint AI is a React + TypeScript + Vite application that provides advanced 
 - Vite 6 (build tool, dev server on port 5000)
 - Express (backend API on port 3001)
 - Tailwind CSS (via CDN)
+- Work Sans font (sans-serif throughout)
 - Google Gemini AI (@google/genai) - using gemini-3-flash-preview model
 
 ## Architecture
@@ -68,7 +69,7 @@ The app uses an on-demand approach for cost efficiency:
 - `GET /api/personas` - List available personas with metadata
 - `POST /api/upload` - Upload video file, returns file URI
 - `POST /api/analyze` - Analyze video with selected personas
-  - Request: `{ title, synopsis, srtContent, questions, language, fileUri, fileMimeType, personaIds }`
+  - Request: `{ title, synopsis, srtContent?, questions, language, fileUri, fileMimeType, personaIds }`
   - Response: `{ results: [{ personaId, status, report?, error?, validationWarnings? }] }`
 
 ### Polling Strategy

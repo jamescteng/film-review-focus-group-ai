@@ -52,7 +52,7 @@ export interface Project {
   id: string;
   title: string;
   synopsis: string;
-  srtContent: string;
+  srtContent?: string;
   videoUrl?: string;
   videoFile?: File;
   questions: string[];

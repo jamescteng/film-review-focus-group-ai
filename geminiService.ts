@@ -92,7 +92,7 @@ export const analyzeWithPersona = async (
       body: JSON.stringify({
         title: project.title,
         synopsis: project.synopsis,
-        srtContent: project.srtContent,
+        srtContent: project.srtContent || '',
         questions: project.questions,
         language: project.language,
         fileUri: uploadResult.fileUri,
