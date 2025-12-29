@@ -1,0 +1,204 @@
+What the log is telling us (line by line)
+Server side (good)
+[Stream_Progress] { bytesReceived: '200MB' }
+
+
+This confirms:
+
+Busboy streaming is still working
+
+Backpressure is fine
+
+The server is still receiving data
+
+So the server did not crash and upload is still ongoing.
+
+Client / Vite proxy side (important)
+[Vite Proxy] Error: read ECONNRESET
+http proxy error: /api/upload
+
+
+This means:
+
+The server closed the HTTP response while the client (or proxy) was still writing the request body.
+
+In other words:
+
+Browser is still sending bytes
+
+Proxy expects the connection to remain open
+
+Server returned a response (early)
+
+Node/Vite proxy resets the socket
+
+This is expected behavior if you:
+
+res.json(...) before the request stream finishes
+
+and don’t explicitly manage the request lifecycle
+
+Why this happens after the architectural change
+
+Before:
+
+/api/upload waited until everything finished
+
+connection stayed open for minutes
+
+browser finished sending data
+
+then server responded
+→ no ECONNRESET
+
+After:
+
+server returns early (correct design)
+
+browser/proxy is still mid-upload
+
+Node HTTP stack says: “connection closed”
+→ ECONNRESET
+
+So this is not a Gemini issue, not Busboy, not memory — it’s HTTP semantics.
+
+The key rule you’ve hit
+
+You cannot close the response while the request body is still streaming.
+
+Returning early ≠ aborting the request stream.
+
+You need to:
+
+either fully consume the request body
+
+or explicitly tell the client to stop sending
+
+The correct fix (production-safe, minimal)
+
+You have two valid patterns. Pick one.
+
+✅ Option A (Recommended): Keep the connection open until upload finishes, but return status early via SSE or polling
+
+This is the most robust and mirrors how S3-style uploads work.
+
+How it works
+
+/api/upload keeps the HTTP connection open
+
+Server does not block on Gemini
+
+Server does consume the entire upload stream
+
+Client gets progress via:
+
+SSE (/api/upload/events)
+
+or a separate polling endpoint
+
+Server flow
+Client → stream → spool
+        └─ connection stays open
+Server returns upload accepted *event*, not HTTP response
+
+
+Only after stream end:
+
+server finalizes job state
+
+then closes response cleanly
+
+No ECONNRESET.
+
+This is the cleanest approach if you want streaming progress anyway.
+
+✅ Option B (Simpler, acceptable): Explicitly drain the request stream before responding
+
+If you want to return early in the same request, you must:
+
+Still let Busboy fully consume the stream
+
+Delay res.end() until busboy.on('finish')
+
+But decouple Gemini work from the response
+
+Conceptually:
+let responseSent = false;
+
+busboy.on("file", stream => {
+  stream.pipe(spool);
+});
+
+busboy.on("finish", () => {
+  if (!responseSent) {
+    res.json({ uploadJobId });
+    responseSent = true;
+  }
+});
+
+
+And crucially:
+
+Gemini upload happens after finish, in background
+
+Response is sent after stream completion, not after Gemini
+
+This preserves:
+
+early logical return (job accepted)
+
+correct transport behavior
+
+This is probably what your dev should implement first.
+
+❌ What NOT to do
+
+Do not call res.json() before Busboy finishes
+
+Do not rely on the browser to stop uploading automatically
+
+Do not “catch ECONNRESET and ignore it” (this causes partial uploads)
+
+Why Vite proxy makes this more visible
+
+Vite’s dev proxy is stricter and noisier than many production proxies.
+
+In production:
+
+Nginx / Cloudflare would show similar resets
+
+or silently drop the connection
+
+So fixing this now is good.
+
+What to tell your dev (copy-paste)
+
+You can send this directly:
+
+The ECONNRESET is expected. We’re returning the HTTP response before the request body finishes streaming. The server must either fully consume the upload stream before responding, or keep the connection open and communicate job acceptance via SSE/polling. Returning early without draining the stream causes the proxy to reset the socket. This is an HTTP lifecycle issue, not Busboy or Gemini.
+
+Recommended next step (clear order)
+
+Modify /api/upload so:
+
+Busboy always drains the stream
+
+Response is sent after finish
+
+Gemini upload + polling runs async afterward
+
+Add /api/upload/status/:jobId
+
+Update frontend:
+
+upload UI finishes quickly
+
+processing UI continues via polling/SSE
+
+Once you do this:
+
+ECONNRESET disappears
+
+UI stops “hanging”
+
+architecture becomes production-grade

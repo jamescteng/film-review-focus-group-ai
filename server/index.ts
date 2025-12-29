@@ -755,8 +755,16 @@ app.post('/api/upload', uploadLimiter, async (req, res) => {
 
     let fileProcessed = false;
     let uploadError: Error | null = null;
+    let spoolResult: { spoolPath: string; fileSize: number; mimeType: string; displayName: string } | null = null;
+    
+    let resolveSpoolCompletion: () => void;
+    let rejectSpoolCompletion: (err: Error) => void;
+    const spoolCompletionPromise = new Promise<void>((resolve, reject) => {
+      resolveSpoolCompletion = resolve;
+      rejectSpoolCompletion = reject;
+    });
 
-    const spoolPromise = new Promise<{ spoolPath: string; fileSize: number; mimeType: string; displayName: string } | null>((resolve, reject) => {
+    const busboyFinishPromise = new Promise<void>((resolve, reject) => {
       busboy.on('file', async (fieldname, fileStream, info) => {
         if (fieldname !== 'video') {
           fileStream.resume();
@@ -772,8 +780,7 @@ app.post('/api/upload', uploadLimiter, async (req, res) => {
           FocalPointLogger.warn("Upload_Rejected", `Invalid MIME type: ${mimeType}`);
           uploadError = new Error("Invalid file type. Only video files are accepted.");
           fileStream.resume();
-          fileStream.on('end', () => resolve(null));
-          fileStream.on('error', () => resolve(null));
+          resolveSpoolCompletion();
           return;
         }
 
@@ -819,7 +826,7 @@ app.post('/api/upload', uploadLimiter, async (req, res) => {
             if (spoolWriteStream) {
               spoolWriteStream.destroy();
             }
-            resolve(null);
+            resolveSpoolCompletion();
             return;
           }
           
@@ -831,22 +838,26 @@ app.post('/api/upload', uploadLimiter, async (req, res) => {
             
             FocalPointLogger.info("Spool_Complete", { totalBytes: bytesReceived, spoolPath });
             
-            resolve({
+            spoolResult = {
               spoolPath: spoolPath!,
               fileSize: bytesReceived,
               mimeType,
               displayName: fileDisplayName
-            });
+            };
+            
+            resolveSpoolCompletion();
             
           } catch (err: any) {
             FocalPointLogger.error("Spool_Error", err.message);
-            reject(err);
+            uploadError = err;
+            resolveSpoolCompletion();
           }
         });
 
         fileStream.on('error', (err) => {
           FocalPointLogger.error("Stream_Error", err);
-          reject(err);
+          uploadError = err;
+          resolveSpoolCompletion();
         });
 
         fileStream.on('limit', () => {
@@ -856,8 +867,12 @@ app.post('/api/upload', uploadLimiter, async (req, res) => {
       });
 
       busboy.on('finish', () => {
+        FocalPointLogger.info("Busboy_Finish", "HTTP request body fully consumed");
         if (!fileProcessed) {
+          resolveSpoolCompletion();
           reject(new Error("No video file provided."));
+        } else {
+          resolve();
         }
       });
 
@@ -869,7 +884,10 @@ app.post('/api/upload', uploadLimiter, async (req, res) => {
 
     req.pipe(busboy);
     
-    const spoolResult = await spoolPromise;
+    await busboyFinishPromise;
+    await spoolCompletionPromise;
+    
+    FocalPointLogger.info("Upload_FullyConsumed", "HTTP request body and spool file complete");
 
     if (uploadError) {
       if (spoolPath) fs.unlink(spoolPath, () => {});
