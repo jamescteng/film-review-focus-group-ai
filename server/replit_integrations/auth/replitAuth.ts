@@ -60,6 +60,21 @@ async function upsertUser(claims: any) {
   });
 }
 
+function getExternalDomain(req: any): string {
+  // Check x-forwarded-host first (set by proxies)
+  const forwardedHost = req.get('x-forwarded-host');
+  if (forwardedHost) {
+    return forwardedHost.split(',')[0].trim();
+  }
+  // Fall back to original host header (without port)
+  const host = req.get('host');
+  if (host) {
+    return host.split(':')[0];
+  }
+  // Last resort: use REPLIT_DEV_DOMAIN env var
+  return process.env.REPLIT_DEV_DOMAIN || req.hostname;
+}
+
 export async function setupAuth(app: Express) {
   app.set("trust proxy", 1);
   app.use(getSession());
@@ -103,27 +118,30 @@ export async function setupAuth(app: Express) {
   passport.deserializeUser((user: Express.User, cb) => cb(null, user));
 
   app.get("/api/login", (req, res, next) => {
-    ensureStrategy(req.hostname);
-    passport.authenticate(`replitauth:${req.hostname}`, {
+    const domain = getExternalDomain(req);
+    ensureStrategy(domain);
+    passport.authenticate(`replitauth:${domain}`, {
       prompt: "login consent",
       scope: ["openid", "email", "profile", "offline_access"],
     })(req, res, next);
   });
 
   app.get("/api/callback", (req, res, next) => {
-    ensureStrategy(req.hostname);
-    passport.authenticate(`replitauth:${req.hostname}`, {
+    const domain = getExternalDomain(req);
+    ensureStrategy(domain);
+    passport.authenticate(`replitauth:${domain}`, {
       successReturnToOrRedirect: "/",
       failureRedirect: "/api/login",
     })(req, res, next);
   });
 
   app.get("/api/logout", (req, res) => {
+    const domain = getExternalDomain(req);
     req.logout(() => {
       res.redirect(
         client.buildEndSessionUrl(config, {
           client_id: process.env.REPL_ID!,
-          post_logout_redirect_uri: `${req.protocol}://${req.hostname}`,
+          post_logout_redirect_uri: `https://${domain}`,
         }).href
       );
     });
