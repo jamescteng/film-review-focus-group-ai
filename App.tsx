@@ -1,10 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppState, Project, AgentReport } from './types';
 import { PERSONAS } from './constants.tsx';
 import { UploadForm } from './components/UploadForm';
 import { ProcessingQueue } from './components/ProcessingQueue';
 import { ScreeningRoom } from './components/ScreeningRoom';
-import { analyzeWithPersona, uploadVideo, UploadResult } from './geminiService';
+import { 
+  analyzeWithPersona, 
+  uploadVideo, 
+  UploadResult,
+  createSession,
+  getSessions,
+  getReportsBySession,
+  updateSession,
+  saveReport,
+  deleteSession,
+  DbSession,
+  DbReport
+} from './geminiService';
+
+function dbReportToAgentReport(dbReport: DbReport): AgentReport {
+  return {
+    personaId: dbReport.personaId,
+    executive_summary: dbReport.executiveSummary,
+    highlights: dbReport.highlights,
+    concerns: dbReport.concerns,
+    answers: dbReport.answers,
+    validationWarnings: dbReport.validationWarnings,
+  };
+}
 
 const App: React.FC = () => {
   const [state, setState] = useState<AppState>(AppState.IDLE);
@@ -15,6 +38,85 @@ const App: React.FC = () => {
   const [processProgress, setProcessProgress] = useState(0);
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
   const [analyzingPersonaId, setAnalyzingPersonaId] = useState<string | null>(null);
+  
+  const [sessions, setSessions] = useState<DbSession[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<number | null>(null);
+  const [showSessionList, setShowSessionList] = useState(false);
+  const [loadingSessions, setLoadingSessions] = useState(true);
+
+  useEffect(() => {
+    loadSessions();
+  }, []);
+
+  const loadSessions = async () => {
+    try {
+      setLoadingSessions(true);
+      const loadedSessions = await getSessions();
+      setSessions(loadedSessions);
+    } catch (err) {
+      console.error('Failed to load sessions:', err);
+    } finally {
+      setLoadingSessions(false);
+    }
+  };
+
+  const loadSession = async (session: DbSession) => {
+    try {
+      const dbReports = await getReportsBySession(session.id);
+      const agentReports = dbReports.map(dbReportToAgentReport);
+      
+      setCurrentSessionId(session.id);
+      const uniquePersonaIds = [...new Set(dbReports.map(r => r.personaId))];
+      setProject({
+        id: String(session.id),
+        title: session.title,
+        synopsis: session.synopsis,
+        questions: session.questions,
+        language: session.language as 'en' | 'zh-TW',
+        selectedPersonaIds: uniquePersonaIds,
+      });
+      
+      if (session.fileUri && session.fileMimeType && session.fileName) {
+        setUploadResult({
+          fileUri: session.fileUri,
+          fileMimeType: session.fileMimeType,
+          fileName: session.fileName,
+        });
+      }
+      
+      setReports(agentReports);
+      setShowSessionList(false);
+      
+      if (agentReports.length > 0) {
+        setState(AppState.VIEWING);
+      } else {
+        setState(AppState.IDLE);
+      }
+    } catch (err: any) {
+      console.error('Failed to load session:', err);
+      setErrorMessage('Failed to load session. Please try again.');
+    }
+  };
+
+  const handleDeleteSession = async (sessionId: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm('Delete this session and all its reports?')) return;
+    
+    try {
+      await deleteSession(sessionId);
+      setSessions(prev => prev.filter(s => s.id !== sessionId));
+      if (currentSessionId === sessionId) {
+        setCurrentSessionId(null);
+        setProject(null);
+        setReports([]);
+        setUploadResult(null);
+        setState(AppState.IDLE);
+      }
+    } catch (err: any) {
+      console.error('Failed to delete session:', err);
+      alert('Failed to delete session.');
+    }
+  };
 
   const startAnalysis = async (p: Project) => {
     setErrorMessage(null);
@@ -26,6 +128,21 @@ const App: React.FC = () => {
     
     const isZH = p.language === 'zh-TW';
     let currentUploadResult: UploadResult | null = null;
+    let sessionId: number | null = null;
+    
+    try {
+      const session = await createSession({
+        title: p.title,
+        synopsis: p.synopsis,
+        questions: p.questions,
+        language: p.language,
+      });
+      sessionId = session.id;
+      setCurrentSessionId(sessionId);
+      setSessions(prev => [session, ...prev]);
+    } catch (err: any) {
+      console.error('Failed to create session:', err);
+    }
     
     if (p.videoFile) {
       try {
@@ -36,6 +153,18 @@ const App: React.FC = () => {
         setUploadResult(currentUploadResult);
         setProcessProgress(40);
         setStatusMessage(isZH ? "視頻處理完成" : "Video uploaded and processed");
+        
+        if (sessionId) {
+          try {
+            await updateSession(sessionId, {
+              fileUri: currentUploadResult.fileUri,
+              fileMimeType: currentUploadResult.fileMimeType,
+              fileName: currentUploadResult.fileName,
+            });
+          } catch (err: any) {
+            console.error('Failed to update session with file info:', err);
+          }
+        }
       } catch (e: any) {
         setErrorMessage(e.message || "Failed to upload video file.");
         setState(AppState.IDLE);
@@ -65,6 +194,15 @@ const App: React.FC = () => {
       setReports([report]);
       setProcessProgress(100);
       setAnalyzingPersonaId(null);
+      
+      if (sessionId) {
+        try {
+          await saveReport(sessionId, report);
+        } catch (err: any) {
+          console.error('Failed to save report:', err);
+        }
+      }
+      
       setTimeout(() => setState(AppState.VIEWING), 600);
     } catch (err: any) {
       console.error("[FocalPoint] Pipeline Error:", err);
@@ -93,12 +231,30 @@ const App: React.FC = () => {
       setReports(prev => [...prev, report]);
       setAnalyzingPersonaId(null);
       setStatusMessage('');
+      
+      if (currentSessionId) {
+        try {
+          await saveReport(currentSessionId, report);
+        } catch (err: any) {
+          console.error('Failed to save report:', err);
+        }
+      }
     } catch (err: any) {
       console.error("[FocalPoint] Additional Persona Error:", err);
       setAnalyzingPersonaId(null);
       setStatusMessage('');
       alert(err.message || "Failed to generate additional report.");
     }
+  };
+
+  const startNewSession = () => {
+    setCurrentSessionId(null);
+    setProject(null);
+    setReports([]);
+    setUploadResult(null);
+    setErrorMessage(null);
+    setState(AppState.IDLE);
+    setShowSessionList(false);
   };
 
   const selectedPersonas = project 
@@ -112,13 +268,84 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#fdfdfd] text-slate-900 selection:bg-slate-900 selection:text-white font-sans overflow-x-hidden">
       <nav className="fixed top-0 left-0 w-full p-8 md:p-12 flex justify-between items-center z-50 pointer-events-none">
-        <div className="flex items-center gap-6 pointer-events-auto group cursor-pointer" onClick={() => window.location.reload()}>
+        <div className="flex items-center gap-6 pointer-events-auto group cursor-pointer" onClick={startNewSession}>
           <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center rotate-12 shadow-xl transition-transform group-hover:rotate-0">
             <div className="w-5 h-5 bg-white rounded-lg -rotate-12 group-hover:rotate-0 transition-transform" />
           </div>
           <span className="text-3xl tracking-tight font-bold">FocalPoint</span>
         </div>
+        
+        {sessions.length > 0 && (
+          <button
+            onClick={() => setShowSessionList(!showSessionList)}
+            className="pointer-events-auto flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl hover:border-slate-400 transition-colors shadow-sm"
+          >
+            <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="text-sm font-medium text-slate-700">History</span>
+            <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{sessions.length}</span>
+          </button>
+        )}
       </nav>
+
+      {showSessionList && (
+        <div className="fixed inset-0 bg-black/20 z-40" onClick={() => setShowSessionList(false)}>
+          <div 
+            className="absolute top-24 right-8 md:right-12 w-80 max-h-[70vh] bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-slate-100 flex justify-between items-center">
+              <h3 className="font-semibold text-slate-900">Previous Sessions</h3>
+              <button
+                onClick={startNewSession}
+                className="text-xs font-medium text-slate-500 hover:text-slate-900 transition-colors"
+              >
+                + New
+              </button>
+            </div>
+            <div className="overflow-y-auto max-h-[calc(70vh-60px)]">
+              {loadingSessions ? (
+                <div className="p-8 text-center text-slate-400">Loading...</div>
+              ) : sessions.length === 0 ? (
+                <div className="p-8 text-center text-slate-400">No sessions yet</div>
+              ) : (
+                sessions.map(session => (
+                  <div
+                    key={session.id}
+                    onClick={() => loadSession(session)}
+                    className={`p-4 border-b border-slate-50 cursor-pointer hover:bg-slate-50 transition-colors group ${
+                      currentSessionId === session.id ? 'bg-slate-50' : ''
+                    }`}
+                  >
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-medium text-slate-900 truncate">{session.title}</h4>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {new Date(session.createdAt).toLocaleDateString(undefined, {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </p>
+                      </div>
+                      <button
+                        onClick={(e) => handleDeleteSession(session.id, e)}
+                        className="p-1.5 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="relative pt-24 pb-20">
         {state === AppState.IDLE && (

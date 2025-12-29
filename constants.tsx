@@ -134,6 +134,5 @@ export const PERSONAS: Persona[] = [
 export const INITIAL_QUESTIONS = [
   "What was the most memorable moment of the film?",
   "Did the ending feel satisfying and earned?",
-  "Which character was your favorite, and why?",
-  "Is this film ready for a festival run?"
+  "Which character was your favorite, and why?"
 ];

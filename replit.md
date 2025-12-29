@@ -19,6 +19,7 @@ FocalPoint AI is a React + TypeScript + Vite application that provides advanced 
 - TypeScript
 - Vite 6 (build tool, dev server on port 5000)
 - Express (backend API on port 3001)
+- PostgreSQL + Drizzle ORM (session and report persistence)
 - Tailwind CSS (via CDN)
 - Inter + Noto Sans TC font stack (better CJK support)
 - Google Gemini AI (@google/genai) - using gemini-3-flash-preview model
@@ -163,6 +164,40 @@ Autoscale deployment - builds frontend with Vite, serves via Express backend.
 - Generic error messages returned to clients
 - Full error details logged server-side only
 
+## Database Schema
+
+### sessions table
+- `id` (serial, primary key)
+- `title` (text, required)
+- `synopsis` (text, required)
+- `questions` (jsonb, array of strings)
+- `language` (varchar, 'en' or 'zh-TW')
+- `file_uri` (text, nullable - Gemini file URI)
+- `file_mime_type` (text, nullable)
+- `file_name` (text, nullable)
+- `created_at` (timestamp)
+- `updated_at` (timestamp)
+
+### reports table
+- `id` (serial, primary key)
+- `session_id` (references sessions.id, cascade delete)
+- `persona_id` (varchar)
+- `executive_summary` (text)
+- `highlights` (jsonb, array)
+- `concerns` (jsonb, array)
+- `answers` (jsonb, array)
+- `validation_warnings` (jsonb, array)
+- `created_at` (timestamp)
+
+### Session API Endpoints
+- `POST /api/sessions` - Create a new session
+- `GET /api/sessions` - List all sessions (ordered by date)
+- `GET /api/sessions/:id` - Get session by ID
+- `PUT /api/sessions/:id` - Update session (e.g., add file URI after upload)
+- `DELETE /api/sessions/:id` - Delete session and all reports
+- `GET /api/sessions/:id/reports` - Get all reports for a session
+- `POST /api/sessions/:id/reports` - Save a report to a session
+
 ## Recent Changes
 - **UI Design System Overhaul**:
   - Inter + Noto Sans TC font stack (better CJK support)
@@ -187,3 +222,8 @@ Autoscale deployment - builds frontend with Vite, serves via Express backend.
 - Reports are cached in state - switching between personas is instant
 - State properly resets when starting a new screening
 - Removed dialogue/SRT input field; srtContent now optional
+- **Database Persistence**: Added PostgreSQL database with Drizzle ORM for persistent sessions and reports
+- **Session History UI**: History button in navbar to view and resume previous sessions
+- **Auto-save**: Sessions and reports automatically saved to database
+- **Language Label**: Added "Report language:" label near language selector for clarity
+- **Updated default questions**: Removed "Is this film ready for festival run?" from defaults

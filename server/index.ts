@@ -12,6 +12,7 @@ import Busboy from 'busboy';
 import rateLimit from 'express-rate-limit';
 import { GoogleGenAI, Type, createPartFromUri } from "@google/genai";
 import { getPersonaById, getAllPersonas, PersonaConfig } from './personas.js';
+import { storage } from './storage.js';
 
 console.log('[FocalPoint] All imports successful');
 
@@ -970,6 +971,150 @@ app.get('/api/personas', statusLimiter, (req, res) => {
     concernCategories: p.concernCategories
   }));
   res.json(personas);
+});
+
+app.post('/api/sessions', statusLimiter, async (req, res) => {
+  try {
+    const { title, synopsis, questions, language, fileUri, fileMimeType, fileName } = req.body;
+    
+    if (!title || typeof title !== 'string' || title.length > MAX_TITLE_LENGTH) {
+      return res.status(400).json({ error: 'Invalid title.' });
+    }
+    
+    const session = await storage.createSession({
+      title: title.trim(),
+      synopsis: synopsis?.trim() || '',
+      questions: Array.isArray(questions) ? questions.slice(0, MAX_QUESTIONS_COUNT) : [],
+      language: VALID_LANGUAGES.includes(language) ? language : 'en',
+      fileUri: fileUri || null,
+      fileMimeType: fileMimeType || null,
+      fileName: fileName || null,
+    });
+    
+    FocalPointLogger.info("Session_Created", { sessionId: session.id });
+    res.json(session);
+  } catch (error: any) {
+    FocalPointLogger.error("Session_Create", error.message);
+    res.status(500).json({ error: 'Failed to create session.' });
+  }
+});
+
+app.get('/api/sessions', statusLimiter, async (req, res) => {
+  try {
+    const sessions = await storage.getSessions();
+    res.json(sessions);
+  } catch (error: any) {
+    FocalPointLogger.error("Sessions_List", error.message);
+    res.status(500).json({ error: 'Failed to load sessions.' });
+  }
+});
+
+app.get('/api/sessions/:id', statusLimiter, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid session ID.' });
+    }
+    
+    const session = await storage.getSession(id);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found.' });
+    }
+    
+    res.json(session);
+  } catch (error: any) {
+    FocalPointLogger.error("Session_Get", error.message);
+    res.status(500).json({ error: 'Failed to load session.' });
+  }
+});
+
+app.put('/api/sessions/:id', statusLimiter, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid session ID.' });
+    }
+    
+    const { fileUri, fileMimeType, fileName } = req.body;
+    
+    const session = await storage.updateSession(id, {
+      fileUri,
+      fileMimeType,
+      fileName,
+    });
+    
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found.' });
+    }
+    
+    FocalPointLogger.info("Session_Updated", { sessionId: session.id });
+    res.json(session);
+  } catch (error: any) {
+    FocalPointLogger.error("Session_Update", error.message);
+    res.status(500).json({ error: 'Failed to update session.' });
+  }
+});
+
+app.delete('/api/sessions/:id', statusLimiter, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid session ID.' });
+    }
+    
+    await storage.deleteSession(id);
+    FocalPointLogger.info("Session_Deleted", { sessionId: id });
+    res.json({ success: true });
+  } catch (error: any) {
+    FocalPointLogger.error("Session_Delete", error.message);
+    res.status(500).json({ error: 'Failed to delete session.' });
+  }
+});
+
+app.get('/api/sessions/:id/reports', statusLimiter, async (req, res) => {
+  try {
+    const sessionId = parseInt(req.params.id, 10);
+    if (isNaN(sessionId)) {
+      return res.status(400).json({ error: 'Invalid session ID.' });
+    }
+    
+    const reports = await storage.getReportsBySession(sessionId);
+    res.json(reports);
+  } catch (error: any) {
+    FocalPointLogger.error("Reports_List", error.message);
+    res.status(500).json({ error: 'Failed to load reports.' });
+  }
+});
+
+app.post('/api/sessions/:id/reports', statusLimiter, async (req, res) => {
+  try {
+    const sessionId = parseInt(req.params.id, 10);
+    if (isNaN(sessionId)) {
+      return res.status(400).json({ error: 'Invalid session ID.' });
+    }
+    
+    const { personaId, executiveSummary, highlights, concerns, answers, validationWarnings } = req.body;
+    
+    if (!personaId || !executiveSummary) {
+      return res.status(400).json({ error: 'Missing required fields.' });
+    }
+    
+    const report = await storage.createReport({
+      sessionId,
+      personaId,
+      executiveSummary,
+      highlights: highlights || [],
+      concerns: concerns || [],
+      answers: answers || [],
+      validationWarnings: validationWarnings || [],
+    });
+    
+    FocalPointLogger.info("Report_Created", { reportId: report.id, sessionId, personaId });
+    res.json(report);
+  } catch (error: any) {
+    FocalPointLogger.error("Report_Create", error.message);
+    res.status(500).json({ error: 'Failed to save report.' });
+  }
 });
 
 async function analyzeWithPersona(

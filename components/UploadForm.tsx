@@ -59,21 +59,24 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onStart }) => {
               <label className="text-xs font-semibold uppercase tracking-widest text-slate-700">Working Title</label>
             </div>
             
-            <div className="flex p-0.5 bg-slate-100 rounded-lg">
-              <button
-                type="button"
-                onClick={() => setLanguage('en')}
-                className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${language === 'en' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
-              >
-                English
-              </button>
-              <button
-                type="button"
-                onClick={() => setLanguage('zh-TW')}
-                className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${language === 'zh-TW' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
-              >
-                繁體中文
-              </button>
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] text-slate-400 font-medium">Report language:</span>
+              <div className="flex p-0.5 bg-slate-100 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => setLanguage('en')}
+                  className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${language === 'en' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
+                >
+                  English
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLanguage('zh-TW')}
+                  className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${language === 'zh-TW' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
+                >
+                  繁體中文
+                </button>
+              </div>
             </div>
           </div>
 

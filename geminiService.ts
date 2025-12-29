@@ -195,6 +195,137 @@ export const analyzeWithPersona = async (
   }
 };
 
+export interface DbSession {
+  id: number;
+  title: string;
+  synopsis: string;
+  questions: string[];
+  language: string;
+  fileUri: string | null;
+  fileMimeType: string | null;
+  fileName: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DbReport {
+  id: number;
+  sessionId: number;
+  personaId: string;
+  executiveSummary: string;
+  highlights: any[];
+  concerns: any[];
+  answers: any[];
+  validationWarnings: string[];
+  createdAt: string;
+}
+
+export const createSession = async (data: {
+  title: string;
+  synopsis: string;
+  questions: string[];
+  language: string;
+  fileUri?: string;
+  fileMimeType?: string;
+  fileName?: string;
+}): Promise<DbSession> => {
+  const response = await fetch('/api/sessions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  
+  if (!response.ok) {
+    const error = await safeJsonParse<{ error?: string }>(response);
+    throw new Error(error.error || 'Failed to create session');
+  }
+  
+  return safeJsonParse<DbSession>(response);
+};
+
+export const getSessions = async (): Promise<DbSession[]> => {
+  const response = await fetch('/api/sessions');
+  
+  if (!response.ok) {
+    const error = await safeJsonParse<{ error?: string }>(response);
+    throw new Error(error.error || 'Failed to load sessions');
+  }
+  
+  return safeJsonParse<DbSession[]>(response);
+};
+
+export const getSession = async (id: number): Promise<DbSession> => {
+  const response = await fetch(`/api/sessions/${id}`);
+  
+  if (!response.ok) {
+    const error = await safeJsonParse<{ error?: string }>(response);
+    throw new Error(error.error || 'Failed to load session');
+  }
+  
+  return safeJsonParse<DbSession>(response);
+};
+
+export const updateSession = async (id: number, data: {
+  fileUri?: string;
+  fileMimeType?: string;
+  fileName?: string;
+}): Promise<DbSession> => {
+  const response = await fetch(`/api/sessions/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  
+  if (!response.ok) {
+    const error = await safeJsonParse<{ error?: string }>(response);
+    throw new Error(error.error || 'Failed to update session');
+  }
+  
+  return safeJsonParse<DbSession>(response);
+};
+
+export const deleteSession = async (id: number): Promise<void> => {
+  const response = await fetch(`/api/sessions/${id}`, { method: 'DELETE' });
+  
+  if (!response.ok) {
+    const error = await safeJsonParse<{ error?: string }>(response);
+    throw new Error(error.error || 'Failed to delete session');
+  }
+};
+
+export const getReportsBySession = async (sessionId: number): Promise<DbReport[]> => {
+  const response = await fetch(`/api/sessions/${sessionId}/reports`);
+  
+  if (!response.ok) {
+    const error = await safeJsonParse<{ error?: string }>(response);
+    throw new Error(error.error || 'Failed to load reports');
+  }
+  
+  return safeJsonParse<DbReport[]>(response);
+};
+
+export const saveReport = async (sessionId: number, report: AgentReport): Promise<DbReport> => {
+  const response = await fetch(`/api/sessions/${sessionId}/reports`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      personaId: report.personaId,
+      executiveSummary: report.executive_summary,
+      highlights: report.highlights,
+      concerns: report.concerns,
+      answers: report.answers,
+      validationWarnings: report.validationWarnings || [],
+    }),
+  });
+  
+  if (!response.ok) {
+    const error = await safeJsonParse<{ error?: string }>(response);
+    throw new Error(error.error || 'Failed to save report');
+  }
+  
+  return safeJsonParse<DbReport>(response);
+};
+
 export const fileToBytes = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const fileSizeMB = (file.size / 1024 / 1024).toFixed(2);
