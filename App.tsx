@@ -4,7 +4,6 @@ import { PERSONAS } from './constants.tsx';
 import { UploadForm } from './components/UploadForm';
 import { ProcessingQueue } from './components/ProcessingQueue';
 import { ScreeningRoom } from './components/ScreeningRoom';
-import { useAuth } from './hooks/useAuth';
 import { 
   analyzeWithPersona, 
   uploadVideo, 
@@ -31,8 +30,6 @@ function dbReportToAgentReport(dbReport: DbReport): AgentReport {
 }
 
 const App: React.FC = () => {
-  const { user, isLoading: authLoading, isAuthenticated, login, logout } = useAuth();
-  
   const [state, setState] = useState<AppState>(AppState.IDLE);
   const [project, setProject] = useState<Project | null>(null);
   const [reports, setReports] = useState<AgentReport[]>([]);
@@ -48,10 +45,8 @@ const App: React.FC = () => {
   const [loadingSessions, setLoadingSessions] = useState(true);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      loadSessions();
-    }
-  }, [isAuthenticated]);
+    loadSessions();
+  }, []);
 
   const loadSessions = async () => {
     try {
@@ -302,43 +297,18 @@ const App: React.FC = () => {
           <span className="text-3xl tracking-tight font-bold">FocalPoint</span>
         </div>
         
-        <div className="flex items-center gap-3 pointer-events-auto">
-          {isAuthenticated && sessions.length > 0 && (
-            <button
-              onClick={() => setShowSessionList(!showSessionList)}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl hover:border-slate-400 transition-colors shadow-sm"
-            >
-              <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span className="text-sm font-medium text-slate-700">History</span>
-              <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{sessions.length}</span>
-            </button>
-          )}
-          
-          {isAuthenticated && user && (
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-xl shadow-sm">
-                {user.profileImageUrl ? (
-                  <img src={user.profileImageUrl} alt="" className="w-6 h-6 rounded-full" />
-                ) : (
-                  <div className="w-6 h-6 bg-slate-200 rounded-full flex items-center justify-center">
-                    <span className="text-xs font-medium text-slate-600">{user.firstName?.[0] || user.email?.[0] || '?'}</span>
-                  </div>
-                )}
-                <span className="text-sm font-medium text-slate-700 hidden sm:inline">
-                  {user.firstName || user.email?.split('@')[0] || 'User'}
-                </span>
-              </div>
-              <button
-                onClick={logout}
-                className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
-              >
-                Logout
-              </button>
-            </div>
-          )}
-        </div>
+        {sessions.length > 0 && (
+          <button
+            onClick={() => setShowSessionList(!showSessionList)}
+            className="pointer-events-auto flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl hover:border-slate-400 transition-colors shadow-sm"
+          >
+            <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="text-sm font-medium text-slate-700">History</span>
+            <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{sessions.length}</span>
+          </button>
+        )}
       </nav>
 
       {showSessionList && (
@@ -400,39 +370,7 @@ const App: React.FC = () => {
       )}
 
       <div className="relative pt-24 pb-20">
-        {authLoading && (
-          <div className="flex items-center justify-center min-h-[60vh]">
-            <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin" />
-          </div>
-        )}
-        
-        {!authLoading && !isAuthenticated && (
-          <div className="animate-in fade-in duration-700 flex flex-col items-center justify-center min-h-[60vh] px-8">
-            <div className="max-w-lg text-center">
-              <h1 className="text-5xl font-bold text-slate-900 mb-6">
-                A private space to think through your film
-              </h1>
-              <p className="text-xl text-slate-600 mb-10">
-                Get AI-powered feedback from multiple professional perspectives. 
-                Understand how acquisitions directors, cultural editors, and audiences might experience your work.
-              </p>
-              <button
-                onClick={login}
-                className="inline-flex items-center gap-3 px-8 py-4 bg-slate-900 text-white text-lg font-semibold rounded-2xl hover:bg-slate-800 transition-colors shadow-xl"
-              >
-                <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
-                </svg>
-                Sign in to get started
-              </button>
-              <p className="text-sm text-slate-500 mt-6">
-                Sign in with Google, GitHub, or email
-              </p>
-            </div>
-          </div>
-        )}
-        
-        {!authLoading && isAuthenticated && state === AppState.IDLE && (
+        {state === AppState.IDLE && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
             {errorMessage && (
               <div className="max-w-4xl mx-auto mt-24 p-10 bg-rose-50 border border-rose-200 rounded-[2.5rem] text-rose-700 text-xl text-center font-medium">
@@ -443,7 +381,7 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {!authLoading && isAuthenticated && state === AppState.ANALYZING && project && (
+        {state === AppState.ANALYZING && project && (
           <div className="flex flex-col items-center">
             <ProcessingQueue 
               personas={selectedPersonas} 
@@ -454,7 +392,7 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {!authLoading && isAuthenticated && state === AppState.VIEWING && project && reports.length > 0 && (
+        {state === AppState.VIEWING && project && reports.length > 0 && (
           <div className="animate-in fade-in duration-1000">
             <ScreeningRoom 
               project={project} 

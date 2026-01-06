@@ -1,12 +1,12 @@
-import { screeningSessions, reports, type ScreeningSession, type InsertScreeningSession, type Report, type InsertReport } from "../shared/schema";
+import { sessions, reports, type Session, type InsertSession, type Report, type InsertReport } from "../shared/schema";
 import { db } from "./db";
 import { eq, desc, and } from "drizzle-orm";
 
 export interface IStorage {
-  createSession(data: InsertScreeningSession): Promise<ScreeningSession>;
-  getSession(id: number): Promise<ScreeningSession | undefined>;
-  getSessionsByUser(userId: string): Promise<ScreeningSession[]>;
-  updateSession(id: number, data: Partial<InsertScreeningSession>): Promise<ScreeningSession | undefined>;
+  createSession(data: InsertSession): Promise<Session>;
+  getSession(id: number): Promise<Session | undefined>;
+  getSessions(): Promise<Session[]>;
+  updateSession(id: number, data: Partial<InsertSession>): Promise<Session | undefined>;
   deleteSession(id: number): Promise<void>;
   
   createReport(data: InsertReport): Promise<Report>;
@@ -16,33 +16,31 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  async createSession(data: InsertScreeningSession): Promise<ScreeningSession> {
-    const [session] = await db.insert(screeningSessions).values(data).returning();
+  async createSession(data: InsertSession): Promise<Session> {
+    const [session] = await db.insert(sessions).values(data).returning();
     return session;
   }
 
-  async getSession(id: number): Promise<ScreeningSession | undefined> {
-    const [session] = await db.select().from(screeningSessions).where(eq(screeningSessions.id, id));
+  async getSession(id: number): Promise<Session | undefined> {
+    const [session] = await db.select().from(sessions).where(eq(sessions.id, id));
     return session || undefined;
   }
 
-  async getSessionsByUser(userId: string): Promise<ScreeningSession[]> {
-    return db.select().from(screeningSessions)
-      .where(eq(screeningSessions.userId, userId))
-      .orderBy(desc(screeningSessions.createdAt));
+  async getSessions(): Promise<Session[]> {
+    return db.select().from(sessions).orderBy(desc(sessions.createdAt));
   }
 
-  async updateSession(id: number, data: Partial<InsertScreeningSession>): Promise<ScreeningSession | undefined> {
+  async updateSession(id: number, data: Partial<InsertSession>): Promise<Session | undefined> {
     const [session] = await db
-      .update(screeningSessions)
+      .update(sessions)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(screeningSessions.id, id))
+      .where(eq(sessions.id, id))
       .returning();
     return session || undefined;
   }
 
   async deleteSession(id: number): Promise<void> {
-    await db.delete(screeningSessions).where(eq(screeningSessions.id, id));
+    await db.delete(sessions).where(eq(sessions.id, id));
   }
 
   async createReport(data: InsertReport): Promise<Report> {

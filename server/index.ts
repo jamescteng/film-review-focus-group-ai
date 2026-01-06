@@ -13,7 +13,6 @@ import rateLimit from 'express-rate-limit';
 import { GoogleGenAI, Type, createPartFromUri } from "@google/genai";
 import { getPersonaById, getAllPersonas, PersonaConfig } from './personas.js';
 import { storage } from './storage.js';
-import { setupAuth, registerAuthRoutes, isAuthenticated } from './replit_integrations/auth/index.js';
 
 console.log('[FocalPoint] All imports successful');
 
@@ -974,13 +973,8 @@ app.get('/api/personas', statusLimiter, (req, res) => {
   res.json(personas);
 });
 
-app.post('/api/sessions', statusLimiter, isAuthenticated, async (req: any, res) => {
+app.post('/api/sessions', statusLimiter, async (req, res) => {
   try {
-    const userId = req.user?.claims?.sub;
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-    
     const { title, synopsis, questions, language, fileUri, fileMimeType, fileName } = req.body;
     
     if (!title || typeof title !== 'string' || title.length > MAX_TITLE_LENGTH) {
@@ -988,7 +982,6 @@ app.post('/api/sessions', statusLimiter, isAuthenticated, async (req: any, res) 
     }
     
     const session = await storage.createSession({
-      userId,
       title: title.trim(),
       synopsis: synopsis?.trim() || '',
       questions: Array.isArray(questions) ? questions.slice(0, MAX_QUESTIONS_COUNT) : [],
@@ -1006,14 +999,9 @@ app.post('/api/sessions', statusLimiter, isAuthenticated, async (req: any, res) 
   }
 });
 
-app.get('/api/sessions', statusLimiter, isAuthenticated, async (req: any, res) => {
+app.get('/api/sessions', statusLimiter, async (req, res) => {
   try {
-    const userId = req.user?.claims?.sub;
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-    
-    const sessions = await storage.getSessionsByUser(userId);
+    const sessions = await storage.getSessions();
     res.json(sessions);
   } catch (error: any) {
     FocalPointLogger.error("Sessions_List", error.message);
@@ -1021,20 +1009,15 @@ app.get('/api/sessions', statusLimiter, isAuthenticated, async (req: any, res) =
   }
 });
 
-app.get('/api/sessions/:id', statusLimiter, isAuthenticated, async (req: any, res) => {
+app.get('/api/sessions/:id', statusLimiter, async (req, res) => {
   try {
-    const userId = req.user?.claims?.sub;
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-    
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) {
       return res.status(400).json({ error: 'Invalid session ID.' });
     }
     
     const session = await storage.getSession(id);
-    if (!session || session.userId !== userId) {
+    if (!session) {
       return res.status(404).json({ error: 'Session not found.' });
     }
     
@@ -1045,31 +1028,19 @@ app.get('/api/sessions/:id', statusLimiter, isAuthenticated, async (req: any, re
   }
 });
 
-app.put('/api/sessions/:id', statusLimiter, isAuthenticated, async (req: any, res) => {
+app.put('/api/sessions/:id', statusLimiter, async (req, res) => {
   try {
-    const userId = req.user?.claims?.sub;
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-    
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) {
       return res.status(400).json({ error: 'Invalid session ID.' });
     }
     
-    const existingSession = await storage.getSession(id);
-    if (!existingSession || existingSession.userId !== userId) {
-      return res.status(404).json({ error: 'Session not found.' });
-    }
-    
-    const { fileUri, fileMimeType, fileName, fileSize, fileLastModified } = req.body;
+    const { fileUri, fileMimeType, fileName } = req.body;
     
     const session = await storage.updateSession(id, {
       fileUri,
       fileMimeType,
       fileName,
-      fileSize,
-      fileLastModified,
     });
     
     if (!session) {
@@ -1084,21 +1055,11 @@ app.put('/api/sessions/:id', statusLimiter, isAuthenticated, async (req: any, re
   }
 });
 
-app.delete('/api/sessions/:id', statusLimiter, isAuthenticated, async (req: any, res) => {
+app.delete('/api/sessions/:id', statusLimiter, async (req, res) => {
   try {
-    const userId = req.user?.claims?.sub;
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-    
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) {
       return res.status(400).json({ error: 'Invalid session ID.' });
-    }
-    
-    const existingSession = await storage.getSession(id);
-    if (!existingSession || existingSession.userId !== userId) {
-      return res.status(404).json({ error: 'Session not found.' });
     }
     
     await storage.deleteSession(id);
@@ -1110,21 +1071,11 @@ app.delete('/api/sessions/:id', statusLimiter, isAuthenticated, async (req: any,
   }
 });
 
-app.get('/api/sessions/:id/reports', statusLimiter, isAuthenticated, async (req: any, res) => {
+app.get('/api/sessions/:id/reports', statusLimiter, async (req, res) => {
   try {
-    const userId = req.user?.claims?.sub;
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-    
     const sessionId = parseInt(req.params.id, 10);
     if (isNaN(sessionId)) {
       return res.status(400).json({ error: 'Invalid session ID.' });
-    }
-    
-    const session = await storage.getSession(sessionId);
-    if (!session || session.userId !== userId) {
-      return res.status(404).json({ error: 'Session not found.' });
     }
     
     const reports = await storage.getReportsBySession(sessionId);
@@ -1135,21 +1086,11 @@ app.get('/api/sessions/:id/reports', statusLimiter, isAuthenticated, async (req:
   }
 });
 
-app.post('/api/sessions/:id/reports', statusLimiter, isAuthenticated, async (req: any, res) => {
+app.post('/api/sessions/:id/reports', statusLimiter, async (req, res) => {
   try {
-    const userId = req.user?.claims?.sub;
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-    
     const sessionId = parseInt(req.params.id, 10);
     if (isNaN(sessionId)) {
       return res.status(400).json({ error: 'Invalid session ID.' });
-    }
-    
-    const session = await storage.getSession(sessionId);
-    if (!session || session.userId !== userId) {
-      return res.status(404).json({ error: 'Session not found.' });
     }
     
     const { personaId, executiveSummary, highlights, concerns, answers, validationWarnings } = req.body;
@@ -1471,37 +1412,27 @@ process.on('exit', (code) => {
 });
 
 console.log('[FocalPoint] Starting server...');
-
-(async function startServer() {
-  // Set up auth middleware FIRST (before any routes that need authentication)
-  await setupAuth(app);
-  registerAuthRoutes(app);
-  console.log('[FocalPoint] Auth setup complete');
-
-  // Start listening
-  const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[FocalPoint] Backend server running on http://0.0.0.0:${PORT}`);
-  });
-
-  server.on('error', (err) => {
-    console.error('[FocalPoint][FATAL] Server error:', err);
-  });
-
-  const gracefulShutdown = (signal: string) => {
-    console.log(`[FocalPoint] Received ${signal}, shutting down gracefully...`);
-    server.close(() => {
-      console.log('[FocalPoint] Server closed');
-      process.exit(0);
-    });
-    setTimeout(() => {
-      console.error('[FocalPoint] Forcing shutdown after timeout');
-      process.exit(1);
-    }, 10000);
-  };
-
-  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-})().catch(err => {
-  console.error('[FocalPoint][FATAL] Failed to start server:', err);
-  process.exit(1);
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`[FocalPoint] Backend server running on http://0.0.0.0:${PORT}`);
 });
+
+server.on('error', (err) => {
+  console.error('[FocalPoint][FATAL] Server error:', err);
+});
+
+const gracefulShutdown = (signal: string) => {
+  console.log(`[FocalPoint] Received ${signal}, shutting down gracefully...`);
+  server.close(() => {
+    console.log('[FocalPoint] Server closed');
+    process.exit(0);
+  });
+  setTimeout(() => {
+    console.error('[FocalPoint] Forcing shutdown after timeout');
+    process.exit(1);
+  }, 5000);
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+console.log('[FocalPoint] Server setup complete, waiting for listen callback...');

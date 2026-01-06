@@ -20,7 +20,6 @@ FocalPoint AI is a React + TypeScript + Vite application that provides advanced 
 - Vite 6 (build tool, dev server on port 5000)
 - Express (backend API on port 3001)
 - PostgreSQL + Drizzle ORM (session and report persistence)
-- Replit Auth (Google/GitHub/Apple/email SSO via OpenID Connect)
 - Tailwind CSS (via CDN)
 - Inter + Noto Sans TC font stack (better CJK support)
 - Google Gemini AI (@google/genai) - using gemini-3-flash-preview model
@@ -31,14 +30,6 @@ FocalPoint AI is a React + TypeScript + Vite application that provides advanced 
 - Vite proxies `/api` requests to the backend
 - API key is securely stored as GEMINI_API_KEY secret (never exposed to frontend)
 - express.json() middleware bypassed for /api/upload route to prevent memory buffering
-
-### Authentication (Replit Auth)
-- Uses Replit as OpenID Connect provider (supports Google, GitHub, Apple, email)
-- Session stored in PostgreSQL (`auth_sessions` table)
-- User data stored in `users` table with Replit user ID as primary key
-- All API endpoints protected with `isAuthenticated` middleware
-- Sessions scoped to user - each user only sees their own screening sessions
-- Auth routes: `/api/login`, `/api/logout`, `/api/callback`, `/api/auth/user`
 
 ### Video Upload Flow (Async with Background Processing)
 The upload uses a job-based async architecture for responsive UI:
@@ -175,23 +166,8 @@ Autoscale deployment - builds frontend with Vite, serves via Express backend.
 
 ## Database Schema
 
-### users table (Replit Auth)
-- `id` (varchar, primary key - Replit user ID)
-- `email` (varchar, unique, nullable)
-- `first_name` (varchar, nullable)
-- `last_name` (varchar, nullable)
-- `profile_image_url` (varchar, nullable)
-- `created_at` (timestamp)
-- `updated_at` (timestamp)
-
-### auth_sessions table (Replit Auth)
-- `sid` (varchar, primary key - session ID)
-- `sess` (jsonb - session data)
-- `expire` (timestamp - session expiry)
-
-### screening_sessions table
+### sessions table
 - `id` (serial, primary key)
-- `user_id` (varchar, foreign key to users.id, cascade delete)
 - `title` (text, required)
 - `synopsis` (text, required)
 - `questions` (jsonb, array of strings)
@@ -199,14 +175,12 @@ Autoscale deployment - builds frontend with Vite, serves via Express backend.
 - `file_uri` (text, nullable - Gemini file URI)
 - `file_mime_type` (text, nullable)
 - `file_name` (text, nullable)
-- `file_size` (bigint, nullable - for fingerprint verification)
-- `file_last_modified` (bigint, nullable - for fingerprint verification)
 - `created_at` (timestamp)
 - `updated_at` (timestamp)
 
 ### reports table
 - `id` (serial, primary key)
-- `session_id` (references screening_sessions.id, cascade delete)
+- `session_id` (references sessions.id, cascade delete)
 - `persona_id` (varchar)
 - `executive_summary` (text)
 - `highlights` (jsonb, array)
@@ -215,17 +189,16 @@ Autoscale deployment - builds frontend with Vite, serves via Express backend.
 - `validation_warnings` (jsonb, array)
 - `created_at` (timestamp)
 
-### Session API Endpoints (all require authentication)
-- `POST /api/sessions` - Create a new session (scoped to current user)
-- `GET /api/sessions` - List user's sessions (ordered by date)
-- `GET /api/sessions/:id` - Get session by ID (only if owned by current user)
+### Session API Endpoints
+- `POST /api/sessions` - Create a new session
+- `GET /api/sessions` - List all sessions (ordered by date)
+- `GET /api/sessions/:id` - Get session by ID
 - `PUT /api/sessions/:id` - Update session (e.g., add file URI after upload)
 - `DELETE /api/sessions/:id` - Delete session and all reports
 - `GET /api/sessions/:id/reports` - Get all reports for a session
 - `POST /api/sessions/:id/reports` - Save a report to a session
 
 ## Recent Changes
-- **Google SSO Authentication**: Added Replit Auth integration supporting Google, GitHub, Apple, and email login. All session data is now scoped to individual user accounts. Landing page shows login prompt for unauthenticated users.
 - **UI Design System Overhaul**:
   - Inter + Noto Sans TC font stack (better CJK support)
   - Reusable UI component library: Card, Badge, Pill, SeverityPill, Tabs, SectionHeader
