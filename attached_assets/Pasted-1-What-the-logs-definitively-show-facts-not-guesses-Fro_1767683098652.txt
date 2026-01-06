@@ -1,0 +1,231 @@
+1. What the logs definitively show (facts, not guesses)
+
+From your logs, we can say with high confidence:
+
+✔ Deduplication works
+
+Same attemptId
+
+Same jobId
+
+Second request correctly hits:
+
+[Upload_Dedupe] existingJobId: upload_... status: SPOOLING
+
+
+So:
+
+You are not creating duplicate jobs
+
+You are not re-uploading to Gemini
+
+Your idempotency key logic is correct
+
+This is a big win.
+
+✔ The second upload is a new HTTP request
+
+The log line:
+
+[Vite Proxy] Starting large file upload...
+
+
+appearing again means:
+
+The browser initiated a new POST /api/upload
+
+This is not Gemini-side
+
+This is not server-side retry
+
+This is client or proxy behavior
+
+✔ The first upload stream was interrupted
+
+This is the critical inference, and it’s correct:
+
+The job is in SPOOLING
+
+No further Stream_Progress after ~200MB
+
+No Spool_Complete
+
+No explicit error
+
+Client likely sees failed to fetch
+
+That means:
+
+The underlying TCP connection died while Busboy was streaming.
+
+2. Is your dev right that “the dedupe is actually working”?
+
+Yes. 100%.
+The logs prove it.
+
+However, dedupe alone is not sufficient for streaming uploads, because:
+
+Idempotency protects against duplicates,
+but it does not protect against half-open jobs.
+
+You’ve hit the classic missing piece.
+
+3. What the real bug is (important)
+
+This sentence from your dev is the key insight:
+
+“The job is stuck in SPOOLING state with no active upload stream feeding it.”
+
+That is exactly the problem.
+
+What happened structurally
+
+Client starts streaming upload
+
+Server creates job, enters SPOOLING
+
+TCP connection dies mid-stream
+
+Busboy never emits finish
+
+Server never transitions job to:
+
+FAILED
+
+ABORTED
+
+STALE
+
+Client retries
+
+Server dedupes and says:
+“Job already exists, still SPOOLING”
+
+Client is now stuck forever
+
+This is not a timeout problem.
+This is a missing failure transition problem.
+
+4. Your dev’s proposed fix — is it correct?
+Short answer
+
+Yes — directionally correct, but incomplete.
+
+What they proposed:
+
+Track old uploads
+
+Allow new uploads if old ones stuck
+
+Remove abandoned jobs
+
+All correct, but you need very explicit rules, otherwise you’ll introduce race conditions.
+
+5. What a correct fix looks like (concrete and safe)
+A. Every upload job needs a heartbeat
+
+Add these fields to your upload job state:
+
+createdAt
+
+lastByteAt
+
+bytesReceived
+
+expectedSize
+
+Update lastByteAt on every data event.
+
+B. Define a stale SPOOLING rule
+
+For example:
+
+If job is in SPOOLING and
+now - lastByteAt > 30 seconds,
+then the job is STALE.
+
+This is not arbitrary — 30–60s is standard.
+
+C. On dedupe hit, check freshness
+
+When a request comes in with an existing attemptId:
+
+if (job.status === 'SPOOLING' && isStale(job)) {
+  markJobAbandoned(job);
+  allowNewUpload();
+} else {
+  returnExistingJob();
+}
+
+
+Do not blindly return the old job.
+
+D. Mark abandoned jobs explicitly
+
+Do not silently overwrite.
+
+Add a terminal state:
+
+ABANDONED
+
+or FAILED_STREAM
+
+This helps debugging and metrics.
+
+E. Always handle stream aborts
+
+You should listen to:
+
+req.on('aborted')
+
+req.on('close')
+
+fileStream.on('error')
+
+When any of these fire:
+
+mark job as ABORTED
+
+record bytes received
+
+stop waiting for finish
+
+This prevents zombie jobs.
+
+6. What I think about the root cause explanation
+
+Your dev said:
+
+“probably browser timeout/retry”
+
+I would refine that slightly:
+
+It may be a proxy reset
+
+It may be a network hiccup
+
+It may be user navigation
+
+It may be dev proxy instability
+
+But it doesn’t matter anymore, because your system should be resilient to any mid-stream abort.
+
+Once you add stale-job handling, the exact cause becomes less important.
+
+7. Final assessment (very important)
+
+You are now at a high level of system maturity:
+
+You implemented idempotency
+
+You detected half-open streaming jobs
+
+You are handling real-world network behavior
+
+You’re not papering over issues with timeouts
+
+This is exactly what production upload systems (S3 multipart, GCS resumable, tus.io) all deal with.
+
+8. What I would say back to your dev (copy-paste)
+
+Your diagnosis is correct. Deduplication is working, but we’re missing failure transitions for interrupted streaming uploads. We need to track lastByteAt and mark SPOOLING jobs as ABANDONED when no data arrives for N seconds, and allow a fresh upload in that case. Also add handlers for req.aborted / close so jobs don’t get stuck waiting forever. Once that’s in place, retries will be safe and the system will be robust to network drops.
