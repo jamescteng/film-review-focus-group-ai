@@ -1,6 +1,12 @@
 import { pgTable, serial, text, timestamp, jsonb, varchar, integer, bigint } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
+export interface PersonaAlias {
+  personaId: string;
+  name: string;
+  role: string;
+}
+
 export const sessions = pgTable("sessions", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -12,6 +18,7 @@ export const sessions = pgTable("sessions", {
   fileName: text("file_name"),
   fileSize: bigint("file_size", { mode: "number" }),
   fileLastModified: bigint("file_last_modified", { mode: "number" }),
+  personaAliases: jsonb("persona_aliases").$type<PersonaAlias[]>().default([]),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

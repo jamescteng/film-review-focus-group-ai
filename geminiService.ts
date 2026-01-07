@@ -272,6 +272,12 @@ export const analyzeWithPersona = async (
   }
 };
 
+export interface PersonaAlias {
+  personaId: string;
+  name: string;
+  role: string;
+}
+
 export interface DbSession {
   id: number;
   title: string;
@@ -283,6 +289,7 @@ export interface DbSession {
   fileName: string | null;
   fileSize: number | null;
   fileLastModified: number | null;
+  personaAliases: PersonaAlias[];
   createdAt: string;
   updatedAt: string;
 }

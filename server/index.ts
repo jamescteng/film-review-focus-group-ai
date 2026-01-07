@@ -42,6 +42,42 @@ const FocalPointLogger = {
 // =============================================================================
 const VALID_LANGUAGES = ['en', 'zh-TW'] as const;
 const MAX_TITLE_LENGTH = 200;
+
+const INTERNATIONAL_NAMES = [
+  { first: 'Amara', last: 'Okonkwo' }, { first: 'Yuki', last: 'Tanaka' },
+  { first: 'Elena', last: 'Vasquez' }, { first: 'Priya', last: 'Sharma' },
+  { first: 'Fatima', last: 'Al-Rashid' }, { first: 'Sofia', last: 'Andersen' },
+  { first: 'Mei', last: 'Zhang' }, { first: 'Aisha', last: 'Mbeki' },
+  { first: 'Isabella', last: 'Romano' }, { first: 'Nadia', last: 'Petrov' },
+  { first: 'Ling', last: 'Chen' }, { first: 'Zara', last: 'Hussain' },
+  { first: 'Chioma', last: 'Eze' }, { first: 'Hana', last: 'Kim' },
+  { first: 'Leila', last: 'Moradi' }, { first: 'Nina', last: 'Johansson' },
+  { first: 'Riya', last: 'Patel' }, { first: 'Chloe', last: 'Dubois' },
+  { first: 'Ananya', last: 'Reddy' }, { first: 'Thandi', last: 'Ndlovu' },
+  { first: 'Sana', last: 'Nakamura' }, { first: 'Ava', last: "O'Brien" },
+  { first: 'Ingrid', last: 'Berg' }, { first: 'Carmen', last: 'Reyes' },
+  { first: 'Olga', last: 'Volkov' }, { first: 'Emeka', last: 'Adeyemi' },
+  { first: 'Kenji', last: 'Watanabe' }, { first: 'Marco', last: 'Silva' },
+  { first: 'Raj', last: 'Gupta' }, { first: 'Omar', last: 'Farouk' },
+  { first: 'Lars', last: 'Nielsen' }, { first: 'Wei', last: 'Liu' },
+  { first: 'Kwame', last: 'Asante' }, { first: 'Alessandro', last: 'Bianchi' },
+  { first: 'Dmitri', last: 'Kozlov' }, { first: 'Jin', last: 'Park' },
+  { first: 'Hassan', last: 'Mahmoud' }, { first: 'Chidi', last: 'Okwu' },
+  { first: 'Takeshi', last: 'Yamamoto' }, { first: 'Arjun', last: 'Nair' },
+  { first: 'Erik', last: 'Lindqvist' }, { first: 'Vikram', last: 'Singh' },
+  { first: 'Pierre', last: 'Laurent' }, { first: 'Kofi', last: 'Mensah' },
+  { first: 'Andrei', last: 'Popescu' },
+];
+
+function generatePersonaAliases(): Array<{ personaId: string; name: string; role: string }> {
+  const shuffled = [...INTERNATIONAL_NAMES].sort(() => Math.random() - 0.5);
+  const allPersonas = getAllPersonas();
+  return allPersonas.map((p, i) => ({
+    personaId: p.id,
+    name: `${shuffled[i % shuffled.length].first} ${shuffled[i % shuffled.length].last}`,
+    role: p.role
+  }));
+}
 const MAX_SYNOPSIS_LENGTH = 5000;
 const MAX_SRT_LENGTH = 500000; // 500KB
 const MAX_QUESTION_LENGTH = 500;
@@ -1137,6 +1173,8 @@ app.post('/api/sessions', statusLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Invalid title.' });
     }
     
+    const personaAliases = generatePersonaAliases();
+    
     const session = await storage.createSession({
       title: title.trim(),
       synopsis: synopsis?.trim() || '',
@@ -1145,6 +1183,7 @@ app.post('/api/sessions', statusLimiter, async (req, res) => {
       fileUri: fileUri || null,
       fileMimeType: fileMimeType || null,
       fileName: fileName || null,
+      personaAliases,
     });
     
     FocalPointLogger.info("Session_Created", { sessionId: session.id });
@@ -1332,10 +1371,14 @@ app.post('/api/sessions/:sessionId/reports/:personaId/voice-script', statusLimit
       return res.status(400).json({ error: 'Invalid persona ID.' });
     }
     
+    const sessionAlias = (session.personaAliases as any[] || []).find(
+      (a: any) => a.personaId === personaId
+    );
+    
     const personaMeta: PersonaMeta = {
       personaId: personaConfig.id,
-      name: personaConfig.name,
-      role: personaConfig.role
+      name: sessionAlias?.name || personaConfig.name,
+      role: sessionAlias?.role || personaConfig.role
     };
     
     const personaReport: PersonaReport = {
@@ -1453,6 +1496,31 @@ app.post('/api/sessions/:sessionId/reports/:personaId/voice-audio', statusLimite
   } catch (error: any) {
     FocalPointLogger.error("VoiceAudio_Generate", error.message);
     res.status(500).json({ error: 'Failed to generate audio.' });
+  }
+});
+
+app.get('/api/voice-audio/*splat', statusLimiter, async (req, res) => {
+  try {
+    const pathParts = req.params.splat as unknown as string[];
+    const objectPath = '/objects/' + pathParts.join('/');
+    
+    const { ObjectStorageService, ObjectNotFoundError } = await import('./replit_integrations/object_storage/objectStorage.js');
+    const objectStorage = new ObjectStorageService();
+    
+    try {
+      const file = await objectStorage.getObjectEntityFile(objectPath);
+      await objectStorage.downloadObject(file, res, 86400);
+    } catch (error) {
+      if (error instanceof ObjectNotFoundError) {
+        return res.status(404).json({ error: 'Audio file not found.' });
+      }
+      throw error;
+    }
+  } catch (error: any) {
+    FocalPointLogger.error("VoiceAudio_Serve", error.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to serve audio.' });
+    }
   }
 });
 

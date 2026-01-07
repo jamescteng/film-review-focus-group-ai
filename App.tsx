@@ -48,6 +48,7 @@ const App: React.FC = () => {
   
   const [sessions, setSessions] = useState<DbSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<number | null>(null);
+  const [currentSession, setCurrentSession] = useState<DbSession | null>(null);
   const [showSessionList, setShowSessionList] = useState(false);
   const [loadingSessions, setLoadingSessions] = useState(true);
 
@@ -73,6 +74,7 @@ const App: React.FC = () => {
       const agentReports = dbReports.map(dbReportToAgentReport);
       
       setCurrentSessionId(session.id);
+      setCurrentSession(session);
       const uniquePersonaIds = [...new Set(dbReports.map(r => r.personaId))];
       setProject({
         id: String(session.id),
@@ -161,6 +163,7 @@ const App: React.FC = () => {
       });
       sessionId = session.id;
       setCurrentSessionId(sessionId);
+      setCurrentSession(session);
       setSessions(prev => [session, ...prev]);
     } catch (err: any) {
       console.error('Failed to create session:', err);
@@ -435,6 +438,7 @@ const App: React.FC = () => {
               analyzingPersonaId={analyzingPersonaId}
               statusMessage={statusMessage}
               sessionId={currentSessionId || undefined}
+              personaAliases={currentSession?.personaAliases || []}
             />
           </div>
         )}

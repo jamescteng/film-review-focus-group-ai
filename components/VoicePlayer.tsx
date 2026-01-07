@@ -70,7 +70,8 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({
       setTranscript(scriptData.transcript);
 
       if (scriptData.audioUrl) {
-        setAudioUrl(scriptData.audioUrl);
+        const servedUrl = scriptData.audioUrl.replace('/objects/', '/api/voice-audio/');
+        setAudioUrl(servedUrl);
         setState('ready');
         return;
       }
@@ -99,7 +100,8 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({
         return;
       }
 
-      setAudioUrl(audioData.audioUrl);
+      const servedUrl = audioData.audioUrl.replace('/objects/', '/api/voice-audio/');
+      setAudioUrl(servedUrl);
       setState('ready');
 
     } catch (err) {

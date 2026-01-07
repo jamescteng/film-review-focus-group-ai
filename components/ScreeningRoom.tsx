@@ -5,6 +5,12 @@ import { Button } from './Button';
 import { Card, Badge, Pill, SeverityPill, Tabs } from './ui';
 import { VoicePlayer } from './VoicePlayer';
 
+interface PersonaAlias {
+  personaId: string;
+  name: string;
+  role: string;
+}
+
 interface ScreeningRoomProps {
   project: Project;
   reports: AgentReport[];
@@ -15,6 +21,7 @@ interface ScreeningRoomProps {
   analyzingPersonaId: string | null;
   statusMessage: string;
   sessionId?: number;
+  personaAliases?: PersonaAlias[];
 }
 
 const getCategoryIcon = (category: string) => {
@@ -113,7 +120,8 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
   isAnalyzing,
   analyzingPersonaId,
   statusMessage,
-  sessionId
+  sessionId,
+  personaAliases = []
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -127,6 +135,15 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
   
   const activeReport = reports[activeReportIndex];
   const activePersona = PERSONAS.find(p => p.id === activeReport?.personaId) || PERSONAS[0];
+  
+  const getPersonaDisplayName = (personaId: string): string => {
+    const alias = personaAliases.find(a => a.personaId === personaId);
+    if (alias) return alias.name;
+    const persona = PERSONAS.find(p => p.id === personaId);
+    return persona?.name || 'Reviewer';
+  };
+  
+  const activePersonaDisplayName = getPersonaDisplayName(activeReport?.personaId);
 
   useEffect(() => {
     setVideoReady(false);
@@ -237,10 +254,10 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
               >
                 <img
                   src={persona.avatar}
-                  alt={persona.name}
+                  alt={getPersonaDisplayName(persona.id)}
                   className="w-7 h-7 rounded-full object-cover"
                 />
-                <span className="font-semibold text-sm">{persona.name}</span>
+                <span className="font-semibold text-sm">{getPersonaDisplayName(persona.id)}</span>
               </button>
             );
           })}
@@ -285,11 +302,11 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
                   >
                     <img
                       src={persona.avatar}
-                      alt={persona.name}
+                      alt={getPersonaDisplayName(persona.id)}
                       className="w-10 h-10 rounded-lg object-cover"
                     />
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-slate-900 text-sm">{persona.name}</p>
+                      <p className="font-semibold text-slate-900 text-sm">{getPersonaDisplayName(persona.id)}</p>
                       <p className="text-xs text-slate-500">{persona.role}</p>
                     </div>
                     <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -502,10 +519,10 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
             <div className="flex flex-col items-center text-center mb-6">
               <img 
                 src={activePersona.avatar} 
-                alt={activePersona.name} 
+                alt={activePersonaDisplayName} 
                 className="w-24 h-24 rounded-2xl object-cover shadow-card mb-4" 
               />
-              <h4 className="text-lg font-bold text-slate-900">{activePersona.name}</h4>
+              <h4 className="text-lg font-bold text-slate-900">{activePersonaDisplayName}</h4>
               <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">{activePersona.role}</p>
               {activePersona.focusAreas && (
                 <div className="flex flex-wrap justify-center gap-1.5 mt-3">
@@ -522,7 +539,7 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
                   <VoicePlayer
                     sessionId={sessionId}
                     personaId={activeReport.personaId}
-                    personaName={activePersona.name}
+                    personaName={activePersonaDisplayName}
                     language={project.language}
                   />
                 </div>
