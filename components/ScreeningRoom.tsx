@@ -537,6 +537,7 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
               {sessionId && activeReport && (
                 <div className="mt-4 w-full">
                   <VoicePlayer
+                    key={`voice-${sessionId}-${activeReport.personaId}`}
                     sessionId={sessionId}
                     personaId={activeReport.personaId}
                     personaName={activePersonaDisplayName}

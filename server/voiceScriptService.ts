@@ -331,40 +331,6 @@ function recomputeCoverage(script: VoiceReportScript, originalCoverage: VoiceRep
   script.coverage.timestampsUsed = [...originalCoverage.timestampsUsed];
 }
 
-const SECTION_AUDIO_TAGS: Record<string, string> = {
-  'OPEN': '[thoughtfully]',
-  'HIGHLIGHTS': '[warmly]',
-  'CONCERNS': '[carefully]',
-  'OBJECTIVES': '[reflective]',
-  'CLOSE': '[encouraging]'
-};
-
-function injectAudioTags(script: VoiceReportScript): VoiceReportScript {
-  const taggedSections = script.sections.map(section => {
-    const sectionTag = SECTION_AUDIO_TAGS[section.sectionId] || '';
-    
-    const taggedLines = section.lines.map((line, lineIndex) => {
-      if (lineIndex === 0 && sectionTag) {
-        return {
-          ...line,
-          text: `${sectionTag} ${line.text}`
-        };
-      }
-      return line;
-    });
-
-    return {
-      ...section,
-      lines: taggedLines
-    };
-  });
-
-  return {
-    ...script,
-    sections: taggedSections
-  };
-}
-
 export interface ValidationResult {
   valid: boolean;
   errors: string[];
@@ -453,8 +419,7 @@ export function getFullTranscript(script: VoiceReportScript): string {
 }
 
 export function getAudioText(script: VoiceReportScript): string {
-  const taggedScript = injectAudioTags(script);
-  return taggedScript.sections
+  return script.sections
     .flatMap(section => section.lines.map(line => line.text))
     .join(' ');
 }

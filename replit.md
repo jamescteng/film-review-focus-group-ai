@@ -262,17 +262,11 @@ Converts a reviewer's report into a natural, spoken-style voice note with option
 - Target: 650-850 EN words / 900-1400 zh-TW characters
 - Falls back to deterministic script on error
 
-**Pass C: Audio Markup Injection** (at TTS time only via `getAudioText`)
-- Tags injected on-demand when generating audio, NOT stored in transcript
-- Adds ElevenLabs audio tags to first line of each section
-- Section tag mapping:
-  - OPEN: `[thoughtfully]`
-  - HIGHLIGHTS: `[warmly]`
-  - CONCERNS: `[carefully]`
-  - OBJECTIVES: `[reflective]`
-  - CLOSE: `[encouraging]`
+**Audio Generation**
+- No audio tags injected - ElevenLabs reads bracketed text as literal words
+- Natural delivery achieved through voice settings (stability=0.45, style=0.0)
 - `getFullTranscript()` returns clean text for UI display
-- `getAudioText()` returns tagged text for ElevenLabs only
+- `getAudioText()` returns same clean text for ElevenLabs TTS
 
 ### Validation
 - Coverage check (all highlights/concerns)
