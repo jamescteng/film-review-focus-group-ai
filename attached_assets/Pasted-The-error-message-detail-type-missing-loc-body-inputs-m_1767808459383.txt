@@ -1,0 +1,73 @@
+The error message {"detail":[{"type":"missing","loc":["body","inputs"],"msg":"Field required","input":null}]} indicates that the inputs field is missing from your request body.
+
+How to Fix the Text to Dialogue API Error
+The Text to Dialogue API requires a specific format for the request body. Here's the correct structure:
+
+{
+  "inputs": [
+    {
+      "text": "First speaker's dialogue here",
+      "voice_id": "voice_id_for_first_speaker"
+    },
+    {
+      "text": "Second speaker's dialogue here",
+      "voice_id": "voice_id_for_second_speaker"
+    }
+    // Add more speakers as needed
+  ],
+  "model_id": "eleven_v3"  // Optional, defaults to eleven_v3
+}
+
+Complete Example for Podcast Generation
+Here's a complete example of how to properly use the Text to Dialogue API for podcast generation:
+
+import requests
+ELEVENLABS_API_KEY = "your-api-key"
+url = "https://api.elevenlabs.io/v1/text-to-dialogue"
+headers = {
+  "Accept": "audio/mpeg",
+  "Content-Type": "application/json",
+  "xi-api-key": ELEVENLABS_API_KEY
+}
+data = {
+  "inputs": [
+    {
+      "text": "[enthusiastic] Welcome to our podcast! Today we're discussing AI advancements.",
+      "voice_id": "first_speaker_voice_id"
+    },
+    {
+      "text": "[curious] That's fascinating! Can you tell us more about recent developments?",
+      "voice_id": "second_speaker_voice_id"
+    },
+    {
+      "text": "[informative] Certainly! The latest models have shown remarkable improvements in understanding context.",
+      "voice_id": "first_speaker_voice_id"
+    }
+  ],
+  "model_id": "eleven_v3"
+}
+response = requests.post(url, json=data, headers=headers)
+if response.status_code == 200:
+    with open("podcast_dialogue.mp3", "wb") as f:
+        f.write(response.content)
+    print("Podcast audio saved as podcast_dialogue.mp3")
+else:
+    print(f"Error: {response.status_code}")
+    print(response.text)
+
+Key Points to Remember
+Required Fields: The inputs array is required and must contain at least one object with text and voice_id 
+1
+.
+
+Format: Each input in the array must have both text and voice_id fields .
+
+Audio Tags: You can use audio tags like [enthusiastic], [sad], etc., to influence the emotional delivery 
+2
+.
+
+Output Format: You can specify the output format using the output_format query parameter if needed .
+
+Streaming Option: For longer podcasts, consider using the streaming endpoint at /v1/text-to-dialogue/stream which returns an audio stream instead of waiting for the entire file 
+3
+.
