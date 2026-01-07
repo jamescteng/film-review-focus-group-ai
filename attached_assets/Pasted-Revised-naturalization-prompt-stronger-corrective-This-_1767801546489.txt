@@ -1,0 +1,107 @@
+Revised naturalization prompt (stronger, corrective)
+
+This replaces your current Pass B prompt.
+
+System instruction (UPDATED)
+You are rewriting professional film notes into a spoken, first-person voice memo.
+
+This must sound like a real human thinking out loud after a screening.
+Not a report. Not a lecture. Not written notes read aloud.
+
+Imagine the reviewer is alone, recording a private voice memo to themselves.
+
+User prompt (UPDATED — this matters)
+Rewrite ONLY the `text` fields inside `sections[].lines[]` to sound like natural spoken reflection.
+
+MANDATORY RULES:
+- Do NOT start any sentence with a timestamp (e.g. “At 02:13”).
+- If a timestamp is mentioned, it must appear later in the sentence, or after an initial clause.
+- Do NOT use report verbs like “establishes”, “demonstrates”, “undermines”, “reduces credibility”.
+- Replace them with experiential language (“what this did for me…”, “this is where I felt…”, “it started to feel…”).
+
+Speech requirements:
+- First-person, reflective, slightly imperfect.
+- Include metacognition: noticing, remembering, reacting.
+- Vary sentence openings (“One thing that stayed with me…”, “What surprised me was…”, “By the time we get to…”).
+- Allow mild subjectivity (“for me”, “personally”, “I kept feeling like…”).
+- Each line max 2 sentences.
+
+Tone:
+- Still professional.
+- Still intelligent.
+- But spoken, not written.
+
+Hard constraints:
+- Keep the same language as input.
+- Do NOT change JSON structure.
+- Do NOT modify or remove refs.
+- Do NOT add new events or timestamps.
+- Do NOT summarize multiple highlights into one.
+
+Here is the input JSON. Return rewritten JSON only.
+
+5. Example: how ONE paragraph should change
+Your current version
+Around 02:13, Mary jokes with Isla and Charlie about the sex of the baby while preparing for the induction. Establishes a crucial baseline of warmth and normalcy.
+
+What you want instead
+One of the first moments that really grounded me comes early on, when Mary is joking with Isla and Charlie about the baby’s sex, around 02:13. That lightness mattered for me, because it made everything that followed feel like a genuine loss rather than just narrative tragedy.
+
+
+Notice:
+
+timestamp is embedded
+
+reaction first, analysis second
+
+no report verbs
+
+human memory framing (“one of the first moments that grounded me”)
+
+6. Example: concern rewrite
+Current
+At 03:52, Repetitive transition shots of Mary walking down corridors.. These moments slow the narrative momentum.
+
+Better
+There’s a stretch early on where I started to feel the momentum dip, especially with the repeated corridor walks around 03:52. I understood what the film was trying to establish, but for me, the repetition began to feel like it was filling space rather than adding tension.
+
+7. Audio tags: dial them down, not up
+
+Right now you’re tagging every section, which makes the delivery feel artificial.
+
+New rule
+
+Max 1 audio tag per section
+
+Never tag individual sentences
+
+Let the text carry emotion
+
+Example:
+
+[thoughtfully] One of the first moments that really stayed with me comes early on…
+
+
+That’s it. No more until the next section.
+
+8. Optional but powerful: add a “memory frame” sentence per section
+
+In Pass A (deterministic step), prepend a line like:
+
+“A few moments kept resurfacing for me…”
+
+“There were also a couple of places where I felt myself pull back…”
+
+Then let Pass B rewrite it naturally.
+
+This gives the LLM permission to think in memory, not bullets.
+
+9. What NOT to do
+
+❌ Do not ask ElevenLabs to “sound more conversational” via settings
+
+❌ Do not add more filler words mechanically (“you know”, “like”)
+
+❌ Do not increase audio tag density
+
+❌ Do not shorten sentences further — this is not about brevity
