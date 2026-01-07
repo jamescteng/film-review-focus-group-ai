@@ -1,4 +1,4 @@
-import { sessions, reports, type Session, type InsertSession, type Report, type InsertReport } from "../shared/schema";
+import { sessions, reports, voiceScripts, type Session, type InsertSession, type Report, type InsertReport, type VoiceScript, type InsertVoiceScript } from "../shared/schema";
 import { db } from "./db";
 import { eq, desc, and } from "drizzle-orm";
 
@@ -13,6 +13,10 @@ export interface IStorage {
   getReport(id: number): Promise<Report | undefined>;
   getReportsBySession(sessionId: number): Promise<Report[]>;
   getReportBySessionAndPersona(sessionId: number, personaId: string): Promise<Report | undefined>;
+  
+  createVoiceScript(data: InsertVoiceScript): Promise<VoiceScript>;
+  getVoiceScript(sessionId: number, personaId: string): Promise<VoiceScript | undefined>;
+  updateVoiceScriptAudio(id: number, audioUrl: string): Promise<VoiceScript | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -63,6 +67,30 @@ export class DatabaseStorage implements IStorage {
       .from(reports)
       .where(and(eq(reports.sessionId, sessionId), eq(reports.personaId, personaId)));
     return report || undefined;
+  }
+
+  async createVoiceScript(data: InsertVoiceScript): Promise<VoiceScript> {
+    const [script] = await db.insert(voiceScripts).values(data).returning();
+    return script;
+  }
+
+  async getVoiceScript(sessionId: number, personaId: string): Promise<VoiceScript | undefined> {
+    const [script] = await db
+      .select()
+      .from(voiceScripts)
+      .where(and(eq(voiceScripts.sessionId, sessionId), eq(voiceScripts.personaId, personaId)))
+      .orderBy(desc(voiceScripts.createdAt))
+      .limit(1);
+    return script || undefined;
+  }
+
+  async updateVoiceScriptAudio(id: number, audioUrl: string): Promise<VoiceScript | undefined> {
+    const [script] = await db
+      .update(voiceScripts)
+      .set({ audioUrl })
+      .where(eq(voiceScripts.id, id))
+      .returning();
+    return script || undefined;
   }
 }
 

@@ -434,6 +434,7 @@ const App: React.FC = () => {
               isAnalyzing={analyzingPersonaId !== null}
               analyzingPersonaId={analyzingPersonaId}
               statusMessage={statusMessage}
+              sessionId={currentSessionId || undefined}
             />
           </div>
         )}

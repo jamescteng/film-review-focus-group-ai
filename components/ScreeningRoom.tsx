@@ -3,6 +3,7 @@ import { Project, AgentReport, Persona, VideoFingerprint } from '../types';
 import { PERSONAS } from '../constants.tsx';
 import { Button } from './Button';
 import { Card, Badge, Pill, SeverityPill, Tabs } from './ui';
+import { VoicePlayer } from './VoicePlayer';
 
 interface ScreeningRoomProps {
   project: Project;
@@ -13,6 +14,7 @@ interface ScreeningRoomProps {
   isAnalyzing: boolean;
   analyzingPersonaId: string | null;
   statusMessage: string;
+  sessionId?: number;
 }
 
 const getCategoryIcon = (category: string) => {
@@ -110,7 +112,8 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
   onVideoReattach,
   isAnalyzing,
   analyzingPersonaId,
-  statusMessage
+  statusMessage,
+  sessionId
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -511,6 +514,17 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
                       {area}
                     </span>
                   ))}
+                </div>
+              )}
+              
+              {sessionId && activeReport && (
+                <div className="mt-4 w-full">
+                  <VoicePlayer
+                    sessionId={sessionId}
+                    personaId={activeReport.personaId}
+                    personaName={activePersona.name}
+                    language={project.language}
+                  />
                 </div>
               )}
             </div>

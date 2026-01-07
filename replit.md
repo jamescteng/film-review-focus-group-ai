@@ -220,3 +220,67 @@ Autoscale deployment - builds frontend with Vite, serves via Express backend.
 - `DELETE /api/sessions/:id` - Delete session and all reports
 - `GET /api/sessions/:id/reports` - Get all reports for a session
 - `POST /api/sessions/:id/reports` - Save a report to a session
+
+### voice_scripts table
+- `id` (serial, primary key)
+- `session_id` (references sessions.id, cascade delete)
+- `persona_id` (varchar)
+- `report_hash` (varchar, 64 chars) - SHA256 hash for cache invalidation
+- `language` (varchar, 'en' or 'zh-TW')
+- `script_json` (jsonb) - Full VoiceReportScript structure
+- `audio_url` (text, nullable) - Object Storage path for generated audio
+- `created_at` (timestamp)
+
+### Voice Script API Endpoints
+- `GET /api/sessions/:sessionId/reports/:personaId/voice-script` - Get cached voice script
+- `POST /api/sessions/:sessionId/reports/:personaId/voice-script` - Generate voice script
+- `POST /api/sessions/:sessionId/reports/:personaId/voice-audio` - Generate audio via ElevenLabs
+
+## Reviewer Voice Notes Feature
+
+Converts a reviewer's report into a natural, spoken-style voice note with optional audio.
+
+### Architecture
+1. **Deterministic Outline Builder** (`server/voiceScriptService.ts`)
+   - Generates structured draft from report data
+   - Ensures coverage of all 5 highlights and 5 concerns
+   - Sections: OPEN, HIGHLIGHTS, CONCERNS, OBJECTIVES (if answers exist), CLOSE
+
+2. **LLM Naturalization Pass**
+   - Rewrites draft lines into natural speech using Gemini
+   - Preserves structure and references
+   - Falls back to deterministic script on error
+
+3. **Validation**
+   - Coverage check (all highlights/concerns)
+   - Word count for runtime estimation
+   - Timestamp verification (no invented timestamps)
+
+4. **ElevenLabs Audio Generation** (`server/elevenLabsService.ts`)
+   - Text-to-speech via ElevenLabs API
+   - Language-aware voice selection (English supported, zh-TW graceful fallback)
+   - Audio stored in Replit Object Storage
+
+### VoiceReportScript Schema
+```typescript
+{
+  version: "1.0",
+  language: "en" | "zh-TW",
+  persona: { personaId, name, role },
+  runtimeTargetSeconds: 180-240,
+  sections: [
+    {
+      sectionId: "OPEN" | "HIGHLIGHTS" | "CONCERNS" | "OBJECTIVES" | "CLOSE",
+      lines: [{ text: string, refs?: [...] }]
+    }
+  ],
+  coverage: { highlights: boolean[], concerns: boolean[], ... }
+}
+```
+
+### Frontend Components
+- `VoicePlayer.tsx` - Play/pause controls, transcript toggle, loading states
+- Integrated into ScreeningRoom persona profile section
+
+### Environment Variables
+- `ELEVENLABS_API_KEY` - Required for audio generation (stored as secret)

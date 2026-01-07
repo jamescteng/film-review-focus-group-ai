@@ -39,7 +39,57 @@ export const reportsRelations = relations(reports, ({ one }) => ({
   }),
 }));
 
+export const voiceScripts = pgTable("voice_scripts", {
+  id: serial("id").primaryKey(),
+  sessionId: integer("session_id").references(() => sessions.id, { onDelete: "cascade" }).notNull(),
+  personaId: varchar("persona_id", { length: 50 }).notNull(),
+  reportHash: varchar("report_hash", { length: 64 }).notNull(),
+  language: varchar("language", { length: 10 }).notNull(),
+  scriptJson: jsonb("script_json").$type<VoiceReportScript>().notNull(),
+  audioUrl: text("audio_url"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const voiceScriptsRelations = relations(voiceScripts, ({ one }) => ({
+  session: one(sessions, {
+    fields: [voiceScripts.sessionId],
+    references: [sessions.id],
+  }),
+}));
+
+export interface VoiceReportScript {
+  version: "1.0";
+  language: "en" | "zh-TW";
+  persona: {
+    personaId: string;
+    name: string;
+    role: string;
+  };
+  runtimeTargetSeconds: number;
+  sections: Array<{
+    sectionId: "OPEN" | "HIGHLIGHTS" | "CONCERNS" | "OBJECTIVES" | "CLOSE";
+    lines: Array<{
+      text: string;
+      refs?: Array<{
+        type: "highlight" | "concern" | "answer" | "summary";
+        index?: number;
+        timestamp?: string;
+        seconds?: number;
+      }>;
+    }>;
+  }>;
+  coverage: {
+    highlights: boolean[];
+    concerns: boolean[];
+    answers: boolean[];
+    timestampsUsed: string[];
+    wordCount: number;
+  };
+}
+
 export type Session = typeof sessions.$inferSelect;
 export type InsertSession = typeof sessions.$inferInsert;
 export type Report = typeof reports.$inferSelect;
 export type InsertReport = typeof reports.$inferInsert;
+export type VoiceScript = typeof voiceScripts.$inferSelect;
+export type InsertVoiceScript = typeof voiceScripts.$inferInsert;
