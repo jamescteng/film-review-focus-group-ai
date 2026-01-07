@@ -1,9 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Project, AgentReport, Persona, VideoFingerprint } from '../types';
 import { PERSONAS } from '../constants.tsx';
 import { Button } from './Button';
 import { Card, Badge, Pill, SeverityPill, Tabs } from './ui';
 import { VoicePlayer } from './VoicePlayer';
+import { ReviewerPairPicker } from './ReviewerPairPicker';
+import { DialoguePlayer } from './DialoguePlayer';
 
 interface PersonaAlias {
   personaId: string;
@@ -136,6 +138,16 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
   const activeReport = reports[activeReportIndex];
   const activePersona = PERSONAS.find(p => p.id === activeReport?.personaId) || PERSONAS[0];
   
+  const [dialogueJobId, setDialogueJobId] = useState<number | null>(null);
+  const [dialogueStatus, setDialogueStatus] = useState<'idle' | 'generating' | 'complete' | 'failed'>('idle');
+  const [dialogueResult, setDialogueResult] = useState<{
+    audioUrl: string;
+    transcript: string;
+    participants: Array<{ personaId: string; displayName: string; role: string }>;
+    turns: Array<{ speakerPersonaId: string; text: string }>;
+  } | null>(null);
+  const [dialogueError, setDialogueError] = useState<string | null>(null);
+  
   const getPersonaDisplayName = (personaId: string): string => {
     const alias = personaAliases.find(a => a.personaId === personaId);
     if (alias) return alias.name;
@@ -208,6 +220,80 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
       setFingerprintWarning(null);
     }
   };
+
+  const pollDialogueStatus = useCallback(async (jobId: number) => {
+    try {
+      const response = await fetch(`/api/dialogue/status/${jobId}`);
+      if (!response.ok) throw new Error('Failed to get status');
+      
+      const data = await response.json();
+      
+      if (data.status === 'complete') {
+        const resultResponse = await fetch(`/api/dialogue/result/${jobId}`);
+        if (resultResponse.ok) {
+          const result = await resultResponse.json();
+          setDialogueResult({
+            audioUrl: result.audioUrl,
+            transcript: result.transcript,
+            participants: result.script.participants,
+            turns: result.script.turns
+          });
+          setDialogueStatus('complete');
+        }
+      } else if (data.status === 'failed') {
+        setDialogueError(data.error || 'Generation failed');
+        setDialogueStatus('failed');
+      } else {
+        setTimeout(() => pollDialogueStatus(jobId), 2000);
+      }
+    } catch (err) {
+      console.error('[Dialogue] Poll error:', err);
+      setDialogueError('Failed to check status');
+      setDialogueStatus('failed');
+    }
+  }, []);
+
+  const handleGenerateDialogue = async (personaIdA: string, personaIdB: string) => {
+    if (!sessionId) return;
+    
+    setDialogueStatus('generating');
+    setDialogueError(null);
+    setDialogueResult(null);
+    
+    try {
+      const response = await fetch('/api/dialogue/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          personaIdA,
+          personaIdB,
+          language: project.language
+        })
+      });
+      
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to start dialogue');
+      }
+      
+      const { jobId } = await response.json();
+      setDialogueJobId(jobId);
+      pollDialogueStatus(jobId);
+    } catch (err) {
+      console.error('[Dialogue] Create error:', err);
+      setDialogueError(err instanceof Error ? err.message : 'Failed to generate dialogue');
+      setDialogueStatus('failed');
+    }
+  };
+
+  const handleRegenerateDialogue = () => {
+    setDialogueResult(null);
+    setDialogueStatus('idle');
+    setDialogueJobId(null);
+  };
+
+  const completedPersonaIds = reports.map(r => r.personaId);
 
   if (!activeReport || !activePersona) {
     return <div className="p-24 text-center text-slate-400 text-xl">Analysis session could not be retrieved.</div>;
@@ -509,6 +595,66 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
                   </Card>
                 ))}
               </div>
+            )}
+          </section>
+
+          <section className="mt-8">
+            {dialogueStatus === 'complete' && dialogueResult ? (
+              <DialoguePlayer
+                audioUrl={dialogueResult.audioUrl}
+                transcript={dialogueResult.transcript}
+                participants={dialogueResult.participants}
+                turns={dialogueResult.turns}
+                language={project.language as 'en' | 'zh-TW'}
+                onRegenerate={handleRegenerateDialogue}
+                isRegenerating={false}
+              />
+            ) : dialogueStatus === 'generating' ? (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    {project.language === 'zh-TW' ? 'Podcast 對談' : 'Podcast Dialogue'}
+                  </h3>
+                  <span className="px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded-full">Beta</span>
+                </div>
+                <div className="flex flex-col items-center py-8 text-gray-500">
+                  <svg className="animate-spin h-8 w-8 mb-3 text-indigo-500" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <p className="font-medium">
+                    {project.language === 'zh-TW' ? '產生對談中...' : 'Generating dialogue...'}
+                  </p>
+                  <p className="text-sm text-gray-400 mt-1">
+                    {project.language === 'zh-TW' ? '這可能需要一分鐘' : 'This may take a minute'}
+                  </p>
+                </div>
+              </div>
+            ) : dialogueStatus === 'failed' ? (
+              <div className="bg-white rounded-xl shadow-sm border border-red-200 p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    {project.language === 'zh-TW' ? 'Podcast 對談' : 'Podcast Dialogue'}
+                  </h3>
+                </div>
+                <div className="text-center py-6">
+                  <p className="text-red-600 mb-4">{dialogueError}</p>
+                  <button
+                    onClick={handleRegenerateDialogue}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                  >
+                    {project.language === 'zh-TW' ? '重試' : 'Try Again'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <ReviewerPairPicker
+                availablePersonas={PERSONAS}
+                completedPersonaIds={completedPersonaIds}
+                language={project.language as 'en' | 'zh-TW'}
+                onGenerate={handleGenerateDialogue}
+                isGenerating={false}
+              />
             )}
           </section>
         </div>

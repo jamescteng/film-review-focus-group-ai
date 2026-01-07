@@ -94,9 +94,61 @@ export interface VoiceReportScript {
   };
 }
 
+export interface DialogueScript {
+  version: "1.0";
+  sessionId: number;
+  language: "en" | "zh-TW";
+  participants: Array<{
+    personaId: string;
+    displayName: string;
+    role: string;
+    voiceId: string;
+  }>;
+  runtimeTargetSec: number;
+  turns: Array<{
+    speakerPersonaId: string;
+    text: string;
+    refs?: Array<{
+      personaId: string;
+      type: "highlight" | "concern" | "answer" | "summary";
+      index?: number;
+      timestamp?: string;
+      seconds?: number;
+    }>;
+    audioTag?: string;
+  }>;
+  coverage: {
+    byPersona: Record<string, { highlights: boolean[]; concerns: boolean[]; answers: boolean[] }>;
+  };
+}
+
+export const dialogueJobs = pgTable("dialogue_jobs", {
+  id: serial("id").primaryKey(),
+  sessionId: integer("session_id").references(() => sessions.id, { onDelete: "cascade" }).notNull(),
+  personaA: varchar("persona_a", { length: 50 }).notNull(),
+  personaB: varchar("persona_b", { length: 50 }).notNull(),
+  language: varchar("language", { length: 10 }).notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("queued"),
+  scriptJson: jsonb("script_json").$type<DialogueScript>(),
+  audioStorageKey: text("audio_storage_key"),
+  attemptCount: integer("attempt_count").notNull().default(0),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const dialogueJobsRelations = relations(dialogueJobs, ({ one }) => ({
+  session: one(sessions, {
+    fields: [dialogueJobs.sessionId],
+    references: [sessions.id],
+  }),
+}));
+
 export type Session = typeof sessions.$inferSelect;
 export type InsertSession = typeof sessions.$inferInsert;
 export type Report = typeof reports.$inferSelect;
 export type InsertReport = typeof reports.$inferInsert;
 export type VoiceScript = typeof voiceScripts.$inferSelect;
 export type InsertVoiceScript = typeof voiceScripts.$inferInsert;
+export type DialogueJob = typeof dialogueJobs.$inferSelect;
+export type InsertDialogueJob = typeof dialogueJobs.$inferInsert;

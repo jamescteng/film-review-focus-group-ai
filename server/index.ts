@@ -15,6 +15,7 @@ import { getPersonaById, getAllPersonas, PersonaConfig } from './personas.js';
 import { storage } from './storage.js';
 import { generateVoiceScript, generateReportHash, getFullTranscript, PersonaReport, PersonaMeta } from './voiceScriptService.js';
 import { generateAudio, isLanguageSupported, checkApiKey as checkElevenLabsApiKey } from './elevenLabsService.js';
+import dialogueRoutes from './dialogueRoutes.js';
 
 console.log('[FocalPoint] All imports successful');
 
@@ -1164,6 +1165,8 @@ app.get('/api/personas', statusLimiter, (req, res) => {
   }));
   res.json(personas);
 });
+
+app.use('/api/dialogue', dialogueRoutes);
 
 app.post('/api/sessions', statusLimiter, async (req, res) => {
   try {
