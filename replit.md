@@ -161,9 +161,10 @@ Autoscale deployment - builds frontend with Vite, serves via Express backend.
 - `app.set('trust proxy', 1)` - Trusts first proxy (Replit load balancer) for accurate IP detection in rate limiting
 
 ### Rate Limiting (express-rate-limit)
-- `/api/upload`: 2 requests/minute per IP
+- `/api/upload`: 3 requests/minute per attemptId (keyed by X-Upload-Attempt-Id header, not IP)
+- `/api/upload/status`: 60 requests/minute per IP (high limit for polling)
 - `/api/analyze`: 5 requests/minute per IP  
-- `/api/health`, `/api/personas`: 20 requests/minute per IP
+- `/api/health`, `/api/personas`, other routes: 20 requests/minute per IP
 
 ### CORS Restrictions
 - Production: Only allows *.repl.co, *.replit.dev, *.replit.app origins
