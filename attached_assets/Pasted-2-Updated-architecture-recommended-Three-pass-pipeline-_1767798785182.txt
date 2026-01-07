@@ -1,0 +1,148 @@
+2. Updated architecture (recommended)
+Three-pass pipeline (simple, robust)
+
+Pass A — Deterministic coverage
+
+Ensure all highlights / concerns are included
+
+Assign section structure
+
+No conversational polish yet
+
+Pass B — Conversational naturalization (LLM)
+
+Rewrite into speech-native text
+
+No audio tags yet (important)
+
+Output clean conversational script
+
+Pass C — Audio markup injection (lightweight)
+
+Add ElevenLabs audio tags at section or line level
+
+Do NOT change wording here
+
+Only annotate emotional intent
+
+This separation keeps your system debuggable and avoids chaos.
+
+3. The Naturalization Prompt (updated, final version)
+
+This is the prompt you should use in Pass B.
+
+System instruction
+You are a professional editor for spoken voice notes and film review podcasts.
+
+Your task is to rewrite a structured reviewer transcript into a natural, conversational, first-person spoken reflection, as if the reviewer is thinking out loud shortly after watching the film.
+
+This is NOT an essay and NOT a report reading.
+It should sound like a human voice memo.
+
+User prompt (drop-in)
+You are given a JSON object representing a reviewer voice script with sections and short draft lines.
+
+Rewrite ONLY the `text` fields inside `sections[].lines[]` so the result sounds like natural speech.
+
+Speech style requirements:
+- First-person throughout.
+- Reflective, fluid, and conversational.
+- Use natural transitions (“One thing that stayed with me…”, “That said…”, “What I kept thinking about was…”, “If I’m being honest…”).
+- Occasionally acknowledge uncertainty or subjectivity (“for me”, “personally”, “at this point”).
+- Avoid list-reading or enumeration.
+- Avoid phrases like “highlight”, “concern”, “issue number”.
+- Each line max 2 sentences.
+
+Tone:
+- Match the reviewer persona’s tone (direct vs warm).
+- Sound like someone speaking to a filmmaker they respect.
+
+Hard constraints:
+- Keep the same language as the input.
+- Do NOT change JSON structure.
+- Do NOT modify or remove `refs`.
+- Do NOT add new timestamps or events.
+- Do NOT invent new observations.
+- Do NOT add audio tags in this step.
+
+Target length:
+- ~650–850 English words OR ~900–1400 Traditional Chinese characters total.
+
+Here is the input JSON. Return the rewritten JSON only:
+
+<PASTE VoiceReportScript JSON HERE>
+
+
+This prompt alone will already make a night-and-day difference.
+
+4. Audio tag injection (Pass C)
+
+Once you have a good conversational script, add audio tags sparingly.
+
+Rule of thumb
+
+Tags at section starts, not every line
+
+1–2 tags per section max
+
+Never stack tags
+
+Suggested mapping
+Section	Recommended tag
+OPEN	[thoughtfully]
+HIGHLIGHTS	[warmly] or [engaged]
+CONCERNS	[carefully] or [seriously]
+OBJECTIVES	[reflective]
+CLOSE	[encouraging]
+Example (after Pass B)
+[thoughtfully] I just finished watching this, and a few things really stayed with me.
+
+[engaged] One moment that genuinely pulled me in was around 12:55. I felt the pacing settle, and suddenly the emotional stakes became much clearer to me.
+
+[carefully] There were also points where I felt my attention start to drift. Around 34 minutes in, I wasn’t entirely sure what I was meant to hold onto emotionally, and that distance added up for me.
+
+[encouraging] Overall, I think the film is closest to working when it trusts those quieter moments and lets them breathe.
+
+
+These tags guide delivery, they don’t replace writing.
+
+5. ElevenLabs API settings (recommended defaults)
+
+Your dev got good values already. I’d lock these as defaults:
+
+{
+  "model_id": "eleven_multilingual_v2",
+  "voice_settings": {
+    "stability": 0.45,
+    "similarity_boost": 0.75,
+    "style": 0.0,
+    "use_speaker_boost": true
+  }
+}
+
+
+Notes:
+
+Slightly lower stability (0.45–0.5) helps conversational variance
+
+Keep style at 0 unless you want exaggeration
+
+Voice choice matters more than tuning
+
+6. Do NOT rely on ElevenLabs for these things
+
+Important to tell your agent explicitly:
+
+❌ Do not expect ElevenLabs to:
+
+add transitions
+
+reorganize thoughts
+
+fix report-like structure
+
+reduce repetition
+
+invent conversational flow
+
+That must be done upstream.
