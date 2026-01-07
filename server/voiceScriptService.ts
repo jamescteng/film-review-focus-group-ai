@@ -58,36 +58,40 @@ function buildDeterministicScript(
   });
 
   const highlightLines: VoiceReportScript['sections'][0]['lines'] = [];
+  highlightLines.push({
+    text: isEnglish
+      ? `A few moments kept resurfacing for me after watching.`
+      : `看完之後，有幾個畫面一直在我腦海裡浮現。`,
+    refs: []
+  });
   report.highlights.slice(0, 5).forEach((h, i) => {
     coverage.highlights[i] = true;
     if (h.timestamp) coverage.timestampsUsed.push(h.timestamp);
     
-    const timePhrase = isEnglish 
-      ? `Around ${h.timestamp}` 
-      : `大約在 ${h.timestamp}`;
-    
     highlightLines.push({
       text: isEnglish 
-        ? `${timePhrase}, ${h.summary}. ${h.why_it_works}`
-        : `${timePhrase}，${h.summary}。${h.why_it_works}`,
+        ? `${h.summary}, around ${h.timestamp}. ${h.why_it_works}`
+        : `${h.summary}，大約在 ${h.timestamp}。${h.why_it_works}`,
       refs: [{ type: 'highlight', index: i, timestamp: h.timestamp, seconds: h.seconds }]
     });
   });
   sections.push({ sectionId: 'HIGHLIGHTS', lines: highlightLines });
 
   const concernLines: VoiceReportScript['sections'][0]['lines'] = [];
+  concernLines.push({
+    text: isEnglish
+      ? `There were also a couple of places where I felt myself pull back.`
+      : `也有幾個地方讓我有些出戲。`,
+    refs: []
+  });
   report.concerns.slice(0, 5).forEach((c, i) => {
     coverage.concerns[i] = true;
     if (c.timestamp) coverage.timestampsUsed.push(c.timestamp);
     
-    const timePhrase = isEnglish 
-      ? `At ${c.timestamp}` 
-      : `在 ${c.timestamp}`;
-    
     concernLines.push({
       text: isEnglish
-        ? `${timePhrase}, ${c.issue}. ${c.impact} Consider ${c.suggested_fix.toLowerCase()}.`
-        : `${timePhrase}，${c.issue}。${c.impact} 建議${c.suggested_fix}。`,
+        ? `${c.issue}, around ${c.timestamp}. ${c.impact} Consider ${c.suggested_fix.toLowerCase()}.`
+        : `${c.issue}，大約在 ${c.timestamp}。${c.impact} 建議${c.suggested_fix}。`,
       refs: [{ type: 'concern', index: i, timestamp: c.timestamp, seconds: c.seconds }]
     });
   });
@@ -166,71 +170,71 @@ async function naturalizeScript(
 ): Promise<VoiceReportScript> {
   const isEnglish = language === 'en';
   
-  const systemPrompt = `You are a professional editor for spoken voice notes and film review podcasts.
+  const systemPrompt = `You are rewriting professional film notes into a spoken, first-person voice memo.
 
-Your task is to rewrite a structured reviewer transcript into a natural, conversational, first-person spoken reflection, as if the reviewer is thinking out loud shortly after watching the film.
+This must sound like a real human thinking out loud after a screening.
+Not a report. Not a lecture. Not written notes read aloud.
 
-This is NOT an essay and NOT a report reading.
-It should sound like a human voice memo.`;
+Imagine the reviewer is alone, recording a private voice memo to themselves.`;
 
   const userPrompt = isEnglish
-    ? `You are given a JSON object representing a reviewer voice script with sections and short draft lines.
+    ? `Rewrite ONLY the "text" fields inside "sections[].lines[]" to sound like natural spoken reflection.
 
-Rewrite ONLY the "text" fields inside "sections[].lines[]" so the result sounds like natural speech.
+MANDATORY RULES:
+- Do NOT start any sentence with a timestamp (e.g. "At 02:13", "Around 12:55").
+- If a timestamp is mentioned, it must appear LATER in the sentence, or after an initial clause.
+- Do NOT use report verbs like "establishes", "demonstrates", "undermines", "reduces credibility".
+- Replace them with experiential language ("what this did for me…", "this is where I felt…", "it started to feel…").
 
-Speech style requirements:
-- First-person throughout.
-- Reflective, fluid, and conversational.
-- Use natural transitions ("One thing that stayed with me…", "That said…", "What I kept thinking about was…", "If I'm being honest…").
-- Occasionally acknowledge uncertainty or subjectivity ("for me", "personally", "at this point").
-- Avoid list-reading or enumeration.
-- Avoid phrases like "highlight", "concern", "issue number".
+Speech requirements:
+- First-person, reflective, slightly imperfect.
+- Include metacognition: noticing, remembering, reacting.
+- Vary sentence openings ("One thing that stayed with me…", "What surprised me was…", "By the time we get to…").
+- Allow mild subjectivity ("for me", "personally", "I kept feeling like…").
 - Each line max 2 sentences.
 
 Tone:
-- Match the reviewer persona's tone (${persona.name} is a ${persona.role} - ${persona.role.includes('Director') || persona.role.includes('director') ? 'direct memo style' : 'warm and thoughtful'}).
+- Still professional.
+- Still intelligent.
+- But spoken, not written.
 - Sound like someone speaking to a filmmaker they respect.
 
 Hard constraints:
-- Keep the same language as the input (English).
+- Keep the same language as input (English).
 - Do NOT change JSON structure.
-- Do NOT modify or remove "refs".
-- Do NOT add new timestamps or events.
-- Do NOT invent new observations.
-- Do NOT add audio tags in this step.
+- Do NOT modify or remove refs.
+- Do NOT add new events or timestamps.
+- Do NOT summarize multiple highlights into one.
 
-Target length:
-- ~650–850 English words total.
-
-Here is the input JSON. Return the rewritten JSON only:
+Here is the input JSON. Return rewritten JSON only:
 ${JSON.stringify(draftScript.sections, null, 2)}`
-    : `你收到一個 JSON 物件，代表一個包含段落和簡短草稿行的評論者語音腳本。
+    : `只改寫 "sections[].lines[]" 內的 "text" 欄位，使結果聽起來像自然的口語反思。
 
-只改寫 "sections[].lines[]" 內的 "text" 欄位，使結果聽起來像自然的語音。
+強制規則：
+- 不要以時間戳開頭（例如「在 02:13」、「大約在 12:55」）。
+- 如果提到時間戳，必須出現在句子後面，或在開頭子句之後。
+- 不要使用報告動詞如「建立」、「展示」、「削弱」、「降低可信度」。
+- 用體驗性語言替代（「這對我的感受是…」、「這是我感覺到…」、「開始有一種感覺…」）。
 
-語音風格要求：
-- 全程使用第一人稱。
-- 反思性、流暢且口語化。
-- 使用自然的過渡（「有一點讓我印象深刻的是…」、「話雖如此…」、「我一直在想的是…」、「說實話…」）。
-- 偶爾承認不確定性或主觀性（「對我來說」、「個人認為」、「就目前而言」）。
-- 避免像在朗讀清單。
-- 避免「亮點」、「問題」、「第幾點」等詞語。
+語音要求：
+- 第一人稱、反思性、略帶不完美。
+- 包含後設認知：注意、回憶、反應。
+- 變化句子開頭（「有一點讓我印象深刻…」、「讓我意外的是…」、「到了那個時候…」）。
+- 允許輕度主觀性（「對我來說」、「個人認為」、「我一直有種感覺…」）。
 - 每行最多2句話。
 
 語調：
-- 匹配評論者角色的語調（${persona.name}是${persona.role}）。
+- 依然專業。
+- 依然有見地。
+- 但是口語的，不是書面的。
 - 聽起來像是在對一位他們尊重的電影製作人說話。
 
 嚴格限制：
 - 保持與輸入相同的語言（繁體中文）。
 - 不要改變 JSON 結構。
-- 不要修改或刪除 "refs"。
-- 不要添加新的時間戳或事件。
-- 不要發明新的觀察。
-- 不要在這一步添加音頻標籤。
-
-目標長度：
-- 總共約 900-1400 個繁體中文字。
+- 不要修改或刪除 refs。
+- 不要添加新的事件或時間戳。
+- 不要將多個亮點合併為一個。
 
 以下是輸入 JSON。只返回改寫後的 JSON：
 ${JSON.stringify(draftScript.sections, null, 2)}`;
@@ -436,18 +440,21 @@ export async function generateVoiceScript(
   if (!validation.valid) {
     console.warn('[VoiceScript] Validation errors, falling back to draft:', validation.errors);
     const draftValidation = validateScript(draftScript, report);
-    const taggedDraft = injectAudioTags(draftScript);
-    return { script: taggedDraft, validation: draftValidation, hash };
+    return { script: draftScript, validation: draftValidation, hash };
   }
   
-  console.log('[VoiceScript] Pass C: Injecting audio tags...');
-  const taggedScript = injectAudioTags(naturalizedScript);
-  
-  return { script: taggedScript, validation, hash };
+  return { script: naturalizedScript, validation, hash };
 }
 
 export function getFullTranscript(script: VoiceReportScript): string {
   return script.sections
     .flatMap(section => section.lines.map(line => line.text))
     .join('\n\n');
+}
+
+export function getAudioText(script: VoiceReportScript): string {
+  const taggedScript = injectAudioTags(script);
+  return taggedScript.sections
+    .flatMap(section => section.lines.map(line => line.text))
+    .join(' ');
 }

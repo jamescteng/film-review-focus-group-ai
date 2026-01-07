@@ -1,5 +1,6 @@
 import { VoiceReportScript } from '../shared/schema';
 import { ObjectStorageService } from './replit_integrations/object_storage';
+import { getAudioText } from './voiceScriptService';
 
 const ELEVENLABS_API_URL = 'https://api.elevenlabs.io/v1';
 
@@ -93,9 +94,7 @@ export async function generateAudio(
   }
 
   try {
-    const fullText = script.sections
-      .flatMap(section => section.lines.map(line => line.text))
-      .join(' ');
+    const fullText = getAudioText(script);
 
     console.log(`[ElevenLabs] Generating audio for ${personaId}, ${fullText.length} chars`);
     
