@@ -48,7 +48,7 @@ async function textToSpeech(text: string, voiceId: string, language: 'en' | 'zh-
     throw new Error('ELEVENLABS_API_KEY not configured');
   }
 
-  const stability = language === 'zh-TW' ? 0.42 : 0.5;
+  const stability = 0.0; // Creative mode for v3
 
   const response = await fetch(`${ELEVENLABS_API_URL}/text-to-speech/${voiceId}`, {
     method: 'POST',
@@ -62,7 +62,7 @@ async function textToSpeech(text: string, voiceId: string, language: 'en' | 'zh-
       model_id: 'eleven_v3',
       voice_settings: {
         stability,
-        similarity_boost: 0.75
+        similarity_boost: 0.65
       }
     })
   });
