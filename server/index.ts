@@ -89,12 +89,13 @@ const uploadLimiterByAttemptId = rateLimit({
   max: 3, // 3 uploads per attemptId per minute (allows retries)
   keyGenerator: (req) => {
     const attemptId = req.headers['x-upload-attempt-id'] as string;
-    const ip = req.ip || 'unknown';
-    return attemptId ? `upload:${attemptId}` : `upload:ip:${ip}`;
+    // Primary key is attemptId; IP fallback is just a safety net
+    return attemptId ? `upload:${attemptId}` : `upload:fallback:${req.ip || 'unknown'}`;
   },
   message: { error: 'Too many requests. Please slow down.' },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false, keyGeneratorIpFallback: false }, // attemptId is primary key
 });
 
 // =============================================================================
