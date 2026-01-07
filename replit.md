@@ -254,19 +254,25 @@ Converts a reviewer's report into a natural, spoken-style voice note with option
 - Rewrites draft lines into speech-native text
 - Uses professional editor persona (not reviewer)
 - Produces reflective, fluid, first-person speech
-- Explicitly forbids audio tags at this stage
+- Mandatory rules:
+  - Timestamps must NOT start sentences (embed mid-sentence)
+  - No report verbs (establishes, demonstrates, undermines)
+  - Experiential language instead (what this did for me, this is where I felt)
+  - Metacognition framing (noticing, remembering, reacting)
 - Target: 650-850 EN words / 900-1400 zh-TW characters
 - Falls back to deterministic script on error
 
-**Pass C: Audio Markup Injection** (`injectAudioTags`)
+**Pass C: Audio Markup Injection** (at TTS time only via `getAudioText`)
+- Tags injected on-demand when generating audio, NOT stored in transcript
 - Adds ElevenLabs audio tags to first line of each section
-- Does NOT change wording, only annotates emotional intent
 - Section tag mapping:
   - OPEN: `[thoughtfully]`
   - HIGHLIGHTS: `[warmly]`
   - CONCERNS: `[carefully]`
   - OBJECTIVES: `[reflective]`
   - CLOSE: `[encouraging]`
+- `getFullTranscript()` returns clean text for UI display
+- `getAudioText()` returns tagged text for ElevenLabs only
 
 ### Validation
 - Coverage check (all highlights/concerns)
