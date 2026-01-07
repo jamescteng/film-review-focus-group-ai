@@ -1,0 +1,301 @@
+Spec: Reviewer Voice Notes (Single Persona, Language-Aware)
+1) Purpose
+
+Add a feature that converts a single reviewer’s existing report (JSON) into a natural, spoken-style voice note and optionally generates audio using ElevenLabs.
+
+This is not dialogue. It is one reviewer speaking, in first person, as if recording a short post-screening memo.
+
+Goals
+
+Grounded in the existing report (no new film events or timestamps)
+
+Covers all 5 highlights + all 5 concerns
+
+Sounds natural for speech (not a list read aloud)
+
+Works for multiple languages (at least en, zh-TW)
+
+Output is voice-ready and consistent with the reviewer persona’s tone
+
+2) UX Requirements
+Placement
+
+For each reviewer result card in the UI (e.g., ScreeningRoom reviewer panel), add a button:
+
+Button label (English): Listen to reviewer notes
+
+Button label (zh-TW): 收聽影評筆記
+
+Flow
+
+User clicks the button for a specific reviewer report.
+
+App generates a voice script (text) for that reviewer if not already cached.
+
+App (optional) sends script to ElevenLabs and plays audio inline.
+
+Provide a transcript toggle to show the script text used for audio.
+
+States
+
+Idle → Generating script…
+
+Script ready → (Optional) Generating audio…
+
+Audio ready → Play/Pause + transcript
+
+Caching
+
+Cache script + audio per (sessionId, personaId, reportHash, language) to avoid re-generating.
+
+3) Inputs
+Required input objects
+
+personaMeta:
+
+personaId: string
+
+name: string
+
+role: string
+
+report: PersonaReportJSON (existing report object)
+
+language: "en" | "zh-TW" (must match report language)
+
+This can come from your session/language setting already used to generate the report.
+
+Assumption: The report text is already in the chosen language.
+
+PersonaReportJSON (existing)
+
+executive_summary: string
+
+highlights: Highlight[5]
+
+concerns: Concern[5]
+
+answers: { question: string; answer: string }[]
+
+4) Output
+4.1 Output JSON Schema (script + references)
+
+Return a structured JSON object (store it as an artifact and optionally render transcript):
+
+type VoiceReportScript = {
+  version: "1.0";
+  language: "en" | "zh-TW";
+  persona: {
+    personaId: string;
+    name: string;
+    role: string;
+  };
+  runtimeTargetSeconds: number; // 180–240s target (3–4 min)
+  sections: Array<{
+    sectionId: "OPEN" | "HIGHLIGHTS" | "CONCERNS" | "OBJECTIVES" | "CLOSE";
+    lines: Array<{
+      text: string; // spoken line; max 2 sentences; speech-friendly
+      refs?: Array<{
+        type: "highlight" | "concern" | "answer" | "summary";
+        index?: number;      // highlight/concern index if applicable
+        timestamp?: string;  // must match referenced item timestamp if used
+        seconds?: number;
+      }>;
+    }>;
+  }>;
+  coverage: {
+    highlights: boolean[]; // length 5
+    concerns: boolean[];   // length 5
+    answers: boolean[];    // length report.answers.length
+    timestampsUsed: string[];
+    wordCount: number;
+  };
+};
+
+4.2 Hard constraints
+
+Output must be in the exact language specified by language.
+
+Do not introduce any timestamp not present in the report items.
+
+Do not introduce new plot events or details not contained in summary, issue, why_it_works, impact, suggested_fix, executive_summary, or answers.
+
+Must cover all 5 highlights and all 5 concerns at least once.
+
+Each lines[i].text must be max 2 sentences.
+
+5) Content Structure (fixed)
+OPEN (20–30 seconds)
+
+First-person.
+
+Sets tone and “post-watch reflection” vibe.
+
+No timestamps required here.
+
+HIGHLIGHTS (60–90 seconds)
+
+Cover all 5 highlights.
+
+For each highlight:
+
+Mention timestamp naturally (optional but recommended)
+
+Convey “what worked” + “why it worked” in speech form
+
+Avoid enumerating “Highlight 1…”
+
+CONCERNS (60–90 seconds)
+
+Cover all 5 concerns.
+
+For each concern:
+
+Mention timestamp naturally (optional but recommended)
+
+Convey issue + impact + suggested fix conversationally
+
+Do not state numeric severity explicitly unless persona style requires it.
+
+OBJECTIVES (30–45 seconds) — only if answers exist
+
+If answers.length > 0, include short responses.
+
+Otherwise omit this section entirely or include with empty lines (prefer omit).
+
+CLOSE (15–20 seconds)
+
+Zoom out with an overall reflection and encouraging next-step.
+
+No new critiques introduced.
+
+6) Language Requirements (IMPORTANT)
+
+The voice script must be produced in the same language as the report.
+
+6.1 Inputs
+
+Use language from the analysis session:
+
+en → English output
+
+zh-TW → Traditional Chinese (Taiwan) output
+
+6.2 Output
+
+The generated script must match the language.
+
+Avoid mixing languages inside one script.
+
+6.3 Timestamp phrasing by language
+
+English: “Around 12:55…”, “At about thirteen minutes…”
+
+zh-TW: “大約在 12:55…”, “差不多十三分鐘左右…”
+
+6.4 ElevenLabs voice selection by language
+
+Choose a voice that supports the language.
+
+If a persona has a fixed voiceId, store a per-language mapping:
+
+voiceIdByLanguage: { en: "...", "zh-TW": "..." }
+
+If ElevenLabs voice does not support zh-TW, fail gracefully:
+
+Still produce transcript/script
+
+Show “Voice unavailable for this language” message
+
+7) Implementation Plan
+Step 1 — Deterministic outline builder (no LLM)
+
+Generate a draft VoiceReportScript from the report using templates:
+
+OPEN: 2–3 lines
+
+For each highlight: 1 line (5 lines total)
+
+For each concern: 1 line (5 lines total)
+
+Objectives: 1 line per answer (cap at 3 lines for 5-minute runtime; if more, summarize)
+
+CLOSE: 1–2 lines
+
+This ensures coverage and references are correct.
+
+Step 2 — Naturalization pass (LLM) (recommended)
+
+Take the deterministic draft lines and run one LLM pass to rewrite into more natural speech while preserving meaning.
+
+Rules for the naturalization prompt:
+
+Keep same language as language
+
+Do not add new timestamps or new plot events
+
+Keep each line ≤ 2 sentences
+
+Preserve persona tone
+
+Return JSON with rewritten lines[].text only (structure unchanged).
+
+Step 3 — Validation (must)
+
+After rewriting, validate:
+
+coverage.highlights all true
+
+coverage.concerns all true
+
+Any timestamp mentioned exists in a referenced item
+
+Word count within target (650–850 for English; for zh-TW use character count heuristic, e.g., 900–1400 chars)
+
+If too long:
+
+drop optional timestamp phrases in some lines
+
+compress OBJECTIVES section
+
+Step 4 — ElevenLabs audio generation (optional)
+
+Generate audio per section or per line
+
+Prefer per-line for easier pause control, then stitch
+
+Cache audio URL/blob keyed by report hash + language
+
+8) Data Model / Storage (recommended)
+
+Store in DB or session history:
+
+voiceScriptJson
+
+voiceAudioUrl (or storage key)
+
+language
+
+createdAt
+
+reportHash
+
+9) Error Handling
+
+If LLM rewrite fails: fall back to deterministic script (still playable as text).
+
+If ElevenLabs fails: keep transcript available and show an error toast.
+
+If language voice not supported: disable audio but allow transcript.
+
+10) Acceptance Criteria
+
+Clicking “Listen to reviewer notes” produces a transcript that reads like spoken reflection.
+
+Script uses the correct language (en or zh-TW) consistently.
+
+Covers all highlights and concerns, no missing items.
+
+No invented timestamps or plot events beyond report content.
+
+Audio (if enabled) plays with distinct persona voice selection.
