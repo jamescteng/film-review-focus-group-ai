@@ -1319,7 +1319,7 @@ async function analyzeWithPersona(
                 type: Type.OBJECT,
                 properties: {
                   timestamp: { type: Type.STRING },
-                  seconds: { type: Type.NUMBER },
+                  seconds: { type: Type.NUMBER, description: "The absolute start time in total seconds from the beginning of the video. Example: For a clip at 10:05, this value must be 605. Do not provide the duration." },
                   summary: { type: Type.STRING },
                   why_it_works: { type: Type.STRING },
                   category: { type: Type.STRING, enum: persona.highlightCategories }
@@ -1333,7 +1333,7 @@ async function analyzeWithPersona(
                 type: Type.OBJECT,
                 properties: {
                   timestamp: { type: Type.STRING },
-                  seconds: { type: Type.NUMBER },
+                  seconds: { type: Type.NUMBER, description: "The absolute start time in total seconds from the beginning of the video. Example: For a clip at 10:05, this value must be 605. Do not provide the duration." },
                   issue: { type: Type.STRING },
                   impact: { type: Type.STRING },
                   severity: { type: Type.NUMBER },

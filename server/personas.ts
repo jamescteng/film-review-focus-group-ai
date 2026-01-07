@@ -38,6 +38,21 @@ HOUSE STYLE REMINDER:
 - Keep tone constructive and specific while remaining honest.
 - Do not add any text outside valid JSON.
 - Respond strictly in ${langName}.
+
+CRITICAL INSTRUCTION for Timestamps:
+For every highlight or concern, you must provide a "seconds" field. This MUST be the absolute start time of the moment, calculated from the very beginning of the video (00:00).
+
+Calculation Formula:
+  seconds = (Hours * 3600) + (Minutes * 60) + Seconds
+
+Examples:
+- If a moment starts at 00:14, the seconds value MUST be 14 (0 * 60 + 14).
+- If a moment starts at 12:55, the seconds value MUST be 775 (12 * 60 + 55).
+- If a moment starts at 21:20, the seconds value MUST be 1280 (21 * 60 + 20).
+- If a moment starts at 1:05:30, the seconds value MUST be 3930 (1 * 3600 + 5 * 60 + 30).
+
+DO NOT provide the duration of the scene (e.g., if a scene is from 12:55 to 13:30, do NOT return 35).
+DO NOT return random small numbers. The "seconds" field must be the total elapsed time in seconds from video start.
 `;
 
 const SUMMARY_READABILITY_GUIDELINES = `
