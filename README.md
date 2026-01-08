@@ -2,7 +2,7 @@
 
 Professional multimodal video analysis for indie filmmakers using Google's Gemini AI.
 
-Get focus group-style feedback through configurable AI personas, each offering a distinct professional perspective on your film. Every report includes timestamped highlights, concerns with severity ratings, and answers to your research questions.
+Get focus group-style feedback through configurable AI personas, each offering a distinct professional perspective on your film. Every report includes timestamped highlights, concerns with severity ratings, and answers to your research questions. Listen to personalized voice notes from each reviewer, or generate podcast-style dialogues between two AI reviewers.
 
 ## Features
 
@@ -10,7 +10,10 @@ Get focus group-style feedback through configurable AI personas, each offering a
 - **Large Video Support** - Upload videos up to 2GB with streaming uploads
 - **Timestamped Feedback** - Every observation links to the exact moment
 - **Structured Reports** - Executive summary, 5 highlights, 5 concerns, research answers
+- **Reviewer Voice Notes** - Audio summaries with personalized opening/closing lines per persona
+- **Podcast Dialogues** - Two-reviewer conversations discussing your video (English only)
 - **Multi-Language** - English or Traditional Chinese output
+- **Session Persistence** - Resume sessions anytime, all reports saved automatically
 - **Secure** - API keys stay on the backend with rate limiting and input validation
 
 ## Personas
@@ -27,6 +30,9 @@ Get focus group-style feedback through configurable AI personas, each offering a
 - **Frontend**: React 19, TypeScript, Vite, Tailwind CSS
 - **Backend**: Express.js with Busboy streaming
 - **AI**: Google Gemini API (`gemini-3-pro-preview`)
+- **TTS**: ElevenLabs (`eleven_v3` for English, `eleven_multilingual_v2` for zh-TW)
+- **Database**: PostgreSQL with Drizzle ORM
+- **Storage**: Replit Object Storage for audio files
 
 ## Quick Start
 
@@ -35,17 +41,23 @@ Get focus group-style feedback through configurable AI personas, each offering a
    npm install
    ```
 
-2. Set your Gemini API key:
+2. Set your API keys:
    ```bash
-   export GEMINI_API_KEY=your_key_here
+   export GEMINI_API_KEY=your_gemini_key
+   export ELEVENLABS_API_KEY=your_elevenlabs_key
    ```
 
-3. Run:
+3. Push database schema:
+   ```bash
+   npm run db:push
+   ```
+
+4. Run:
    ```bash
    npm run dev
    ```
 
-4. Open http://localhost:5000
+5. Open http://localhost:5000
 
 ## API
 
@@ -54,7 +66,25 @@ Get focus group-style feedback through configurable AI personas, each offering a
 | `POST /api/upload` | Upload video, returns fileUri |
 | `POST /api/analyze` | Analyze video with selected personas |
 | `GET /api/personas` | List available personas |
+| `POST /api/sessions/:id/reports/:personaId/voice-script` | Generate voice note |
+| `POST /api/dialogue/create` | Start podcast dialogue generation |
+| `GET /api/dialogue/result/:id` | Get completed podcast dialogue |
 | `GET /api/health` | Health check |
+
+## Voice Notes
+
+Each persona can generate an audio summary of their report with:
+- Personalized opening/closing lines matching their personality
+- Full coverage of highlights, concerns, and research answers
+- Natural spoken-style prose (not robotic reading)
+- Language-specific voice models for optimal quality
+
+## Podcast Dialogues
+
+Generate natural two-person conversations between any pair of reviewers:
+- Both personas discuss highlights and concerns from their reports
+- Single audio file with distinct voices for each participant
+- **English only** (ElevenLabs API limitation)
 
 ## Limits
 

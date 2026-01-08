@@ -3,7 +3,7 @@
 ## Product Overview
 
 ### What It Does
-FocalPoint AI is an AI-powered focus group platform for indie filmmakers. It analyzes video content through multiple AI "reviewers" (personas), each offering a distinct professional perspective with timestamped feedback.
+FocalPoint AI is an AI-powered focus group platform for indie filmmakers. It analyzes video content through multiple AI "reviewers" (personas), each offering a distinct professional perspective with timestamped feedback. Additionally, it offers **Reviewer Voice Notes** (audio summaries of reports) and **Podcast Dialogues** (two-reviewer conversations).
 
 ### Who It's For
 - Independent filmmakers seeking professional feedback before festival submissions
@@ -50,7 +50,17 @@ Get instant, multi-perspective feedback on your video that would traditionally r
    ├── No re-upload needed (video cached server-side)
    └── Switch between reports instantly
 
-6. RESUME LATER (Session Persistence)
+6. LISTEN TO VOICE NOTES (Optional)
+   ├── Generate audio summary for any reviewer's report
+   ├── Personalized opening/closing lines per persona
+   └── Available in English or Traditional Chinese
+
+7. GENERATE PODCAST DIALOGUE (Optional, English Only)
+   ├── Select two reviewers for a conversation
+   ├── AI generates natural dialogue between them
+   └── Single audio file with distinct voices
+
+8. RESUME LATER (Session Persistence)
    ├── Sessions auto-save to database
    ├── Access history from navbar
    └── Reattach video file to enable playback on return
@@ -69,13 +79,20 @@ Get instant, multi-perspective feedback on your video that would traditionally r
 │   Browser    │────▶│    Vite      │────▶│   Express    │────▶│  Gemini AI   │
 │   (React)    │     │   Proxy      │     │   Backend    │     │   (Google)   │
 └──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
-       │                                         │
-       │                                         │
-       ▼                                         ▼
-┌──────────────┐                         ┌──────────────┐
-│ Local Video  │                         │  PostgreSQL  │
-│   Playback   │                         │   Database   │
-└──────────────┘                         └──────────────┘
+       │                                         │                     │
+       │                                         │                     │
+       ▼                                         ▼                     ▼
+┌──────────────┐                         ┌──────────────┐     ┌──────────────┐
+│ Local Video  │                         │  PostgreSQL  │     │  ElevenLabs  │
+│   Playback   │                         │   Database   │     │   (TTS)      │
+└──────────────┘                         └──────────────┘     └──────────────┘
+                                                │
+                                                ▼
+                                         ┌──────────────┐
+                                         │   Replit     │
+                                         │   Object     │
+                                         │   Storage    │
+                                         └──────────────┘
 
 
 COMPONENT DETAILS:
@@ -83,39 +100,54 @@ COMPONENT DETAILS:
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ FRONTEND (React + TypeScript + Vite)                         Port 5000      │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│ • App.tsx           - Main state management, session orchestration          │
-│ • UploadForm.tsx    - Video upload, metadata entry, fingerprint capture     │
-│ • ScreeningRoom.tsx - Report display, video player, reviewer switching      │
-│ • geminiService.ts  - API client with polling logic                         │
+│ • App.tsx              - Main state management, session orchestration       │
+│ • UploadForm.tsx       - Video upload, metadata entry, fingerprint capture  │
+│ • ScreeningRoom.tsx    - Report display, video player, reviewer switching   │
+│ • VoicePlayer.tsx      - Voice note audio playback and transcript           │
+│ • ReviewerPairPicker.tsx - Podcast persona selection UI                     │
+│ • DialoguePlayer.tsx   - Podcast dialogue playback with transcript          │
+│ • geminiService.ts     - API client with polling logic                      │
 └─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    │ /api/* requests proxied
-                                    ▼
+                                   │
+                                   │ /api/* requests proxied
+                                   ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ BACKEND (Express + TypeScript)                               Port 3001      │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│ • POST /api/upload         - Receive video, stream to Gemini               │
-│ • GET  /api/upload/status  - Poll upload job status                        │
-│ • POST /api/analyze        - Run AI analysis with selected personas        │
-│ • CRUD /api/sessions       - Session persistence                           │
-│ • CRUD /api/sessions/:id/reports - Report storage                          │
+│ • POST /api/upload              - Receive video, stream to Gemini           │
+│ • GET  /api/upload/status       - Poll upload job status                    │
+│ • POST /api/analyze             - Run AI analysis with selected personas    │
+│ • CRUD /api/sessions            - Session persistence                       │
+│ • CRUD /api/sessions/:id/reports - Report storage                           │
+│ • POST /api/sessions/:id/reports/:personaId/voice-script - Generate voice   │
+│ • POST /api/dialogue/create     - Start podcast dialogue job                │
+│ • GET  /api/dialogue/status/:id - Poll dialogue job status                  │
+│ • GET  /api/dialogue/result/:id - Get completed dialogue audio/transcript   │
 └─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                    ┌───────────────┴───────────────┐
-                    ▼                               ▼
-┌───────────────────────────┐       ┌───────────────────────────┐
-│ GEMINI AI                 │       │ POSTGRESQL                │
-├───────────────────────────┤       ├───────────────────────────┤
-│ • Video understanding     │       │ • sessions table          │
-│ • Multimodal analysis     │       │   - title, synopsis       │
-│ • Persona-based prompts   │       │   - questions, language   │
-│ • Structured JSON output  │       │   - file fingerprint      │
-│                           │       │                           │
-│ Model: gemini-3-pro-      │       │ • reports table           │
-│        preview            │       │   - persona_id            │
-└───────────────────────────┘       │   - summary, highlights   │
-                                    │   - concerns, answers     │
-                                    └───────────────────────────┘
+                                   │
+                   ┌───────────────┼───────────────┬───────────────┐
+                   ▼               ▼               ▼               ▼
+┌───────────────────────┐ ┌───────────────────────┐ ┌───────────────────────┐
+│ GEMINI AI             │ │ POSTGRESQL            │ │ ELEVENLABS            │
+├───────────────────────┤ ├───────────────────────┤ ├───────────────────────┤
+│ • Video understanding │ │ • sessions table      │ │ • Text-to-Speech      │
+│ • Multimodal analysis │ │ • reports table       │ │ • eleven_v3 (English) │
+│ • Persona prompts     │ │ • voice_scripts table │ │ • eleven_multilingual │
+│ • Voice script gen    │ │ • dialogue_jobs table │ │   _v2 (zh-TW)         │
+│ • Dialogue script gen │ │                       │ │ • Text-to-Dialogue    │
+│                       │ │                       │ │   API (English only)  │
+│ Model: gemini-3-pro-  │ └───────────────────────┘ └───────────────────────┘
+│        preview        │
+└───────────────────────┘
+                                         │
+                                         ▼
+                                ┌───────────────────────┐
+                                │ REPLIT OBJECT STORAGE │
+                                ├───────────────────────┤
+                                │ • Voice note audio    │
+                                │ • Podcast dialogue    │
+                                │   audio files         │
+                                └───────────────────────┘
 ```
 
 ---
@@ -165,7 +197,7 @@ USER                    FRONTEND                 BACKEND                 GEMINI
 
 JOB STATES:
   RECEIVED → SPOOLING → UPLOADING → PROCESSING → ACTIVE
-                                              └─→ ERROR
+                                             └─→ ERROR
 ```
 
 ---
@@ -227,6 +259,127 @@ FRONTEND                      BACKEND                           GEMINI
 
 ---
 
+## Data Flow: Voice Notes
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    VOICE NOTE GENERATION (Three-Pass Pipeline)               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+FRONTEND                      BACKEND                     GEMINI        ELEVENLABS
+    │                            │                           │              │
+    │ POST /voice-script         │                           │              │
+    │ { generateAudio: true }    │                           │              │
+    │───────────────────────────▶│                           │              │
+    │                            │                           │              │
+    │                            │ PASS A: Deterministic     │              │
+    │                            │ Build structured draft    │              │
+    │                            │ covering all highlights,  │              │
+    │                            │ concerns, answers         │              │
+    │                            │                           │              │
+    │                            │ Generate personalized     │              │
+    │                            │ open/close lines          │              │
+    │                            │──────────────────────────▶│              │
+    │                            │                           │              │
+    │                            │ { openingLines[2],        │              │
+    │                            │   closingLines[2] }       │              │
+    │                            │◀──────────────────────────│              │
+    │                            │                           │              │
+    │                            │ PASS B: Naturalization    │              │
+    │                            │──────────────────────────▶│              │
+    │                            │                           │              │
+    │                            │ Rewrite as natural        │              │
+    │                            │ spoken text with          │              │
+    │                            │ audio tags (English)      │              │
+    │                            │◀──────────────────────────│              │
+    │                            │                           │              │
+    │                            │ AUDIO GENERATION          │              │
+    │                            │                           │              │
+    │                            │ English: eleven_v3        │              │
+    │                            │ zh-TW: eleven_multilingual_v2            │
+    │                            │─────────────────────────────────────────▶│
+    │                            │                           │              │
+    │                            │                           │   { audio }  │
+    │                            │◀─────────────────────────────────────────│
+    │                            │                           │              │
+    │                            │ Store audio in Object     │              │
+    │                            │ Storage, cache script     │              │
+    │                            │                           │              │
+    │ { transcript, audioUrl }   │                           │              │
+    │◀───────────────────────────│                           │              │
+
+
+VOICE MODEL SELECTION:
+  English:  eleven_v3 (stability=0.0, supports audio tags like <chuckle>)
+  zh-TW:    eleven_multilingual_v2 (stability=0.5, audio tags stripped)
+```
+
+---
+
+## Data Flow: Podcast Dialogue
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    PODCAST DIALOGUE GENERATION (English Only)                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+FRONTEND                      BACKEND                     GEMINI        ELEVENLABS
+    │                            │                           │              │
+    │ POST /dialogue/create      │                           │              │
+    │ { personaIdA, personaIdB } │                           │              │
+    │───────────────────────────▶│                           │              │
+    │                            │                           │              │
+    │ { jobId }                  │ Create dialogue job       │              │
+    │◀───────────────────────────│ (status: queued)          │              │
+    │                            │                           │              │
+    │                            │ SCRIPT GENERATION         │              │
+    │                            │ Build conversation        │              │
+    │                            │ between two personas      │              │
+    │                            │──────────────────────────▶│              │
+    │                            │                           │              │
+    │                            │ { participants[],         │              │
+    │                            │   turns[],                │              │
+    │                            │   coverage }              │              │
+    │                            │◀──────────────────────────│              │
+    │                            │                           │              │
+    │ Poll GET /status/:jobId    │                           │              │
+    │───────────────────────────▶│                           │              │
+    │                            │                           │              │
+    │ { status: 'generating' }   │                           │              │
+    │◀───────────────────────────│                           │              │
+    │                            │                           │              │
+    │                            │ TEXT-TO-DIALOGUE API      │              │
+    │                            │ (ElevenLabs endpoint)     │              │
+    │                            │─────────────────────────────────────────▶│
+    │                            │                           │              │
+    │                            │                    Single audio file     │
+    │                            │                    with distinct voices  │
+    │                            │◀─────────────────────────────────────────│
+    │                            │                           │              │
+    │                            │ Store in Object Storage   │              │
+    │                            │ Update job status         │              │
+    │                            │                           │              │
+    │ Poll GET /status/:jobId    │                           │              │
+    │───────────────────────────▶│                           │              │
+    │                            │                           │              │
+    │ { status: 'complete' }     │                           │              │
+    │◀───────────────────────────│                           │              │
+    │                            │                           │              │
+    │ GET /dialogue/result/:id   │                           │              │
+    │───────────────────────────▶│                           │              │
+    │                            │                           │              │
+    │ { audioUrl, transcript,    │                           │              │
+    │   participants, turns }    │                           │              │
+    │◀───────────────────────────│                           │              │
+
+
+LANGUAGE RESTRICTION:
+  ElevenLabs Text-to-Dialogue API only supports English.
+  UI shows "English Only" badge for zh-TW sessions.
+```
+
+---
+
 ## Key Technical Decisions
 
 ### 1. On-Demand Persona Analysis
@@ -253,6 +406,27 @@ FRONTEND                      BACKEND                           GEMINI
 **Why:** Video analysis is valuable output users want to keep and reference.
 **How:** Auto-save sessions and reports to PostgreSQL. Users can access history from navbar and resume any session.
 
+### 7. Three-Pass Voice Script Pipeline
+**Why:** Ensure comprehensive coverage while maintaining natural speech patterns.
+**How:** 
+- Pass A: Deterministic draft guaranteeing all highlights/concerns mentioned
+- Pass B: LLM naturalizes into spoken-style prose with persona personality
+- Audio: ElevenLabs TTS with language-specific model selection
+
+### 8. Personalized Voice Opening/Closing Lines
+**Why:** Make each persona's voice note feel authentic to their character.
+**How:** LLM generates 2 opening + 2 closing options based on persona role, voice style, and specific report content. Fallback to generic lines on error.
+
+### 9. Language-Specific TTS Models
+**Why:** Optimize audio quality for each language.
+**How:**
+- English: `eleven_v3` with stability=0.0 (natural variation), supports audio emotion tags
+- zh-TW: `eleven_multilingual_v2` with stability=0.5, audio tags stripped (unsupported)
+
+### 10. Podcast Dialogue (English Only)
+**Why:** Create engaging two-person discussions from multiple reviewer perspectives.
+**How:** Generate dialogue script via Gemini, use ElevenLabs Text-to-Dialogue API for multi-voice audio. API limitation: English only.
+
 ---
 
 ## Database Schema
@@ -269,6 +443,7 @@ sessions
 ├── file_name (text, nullable)
 ├── file_size (bigint, nullable)
 ├── file_last_modified (bigint, nullable)
+├── persona_aliases (jsonb) -- Custom names/roles for personas
 ├── created_at (timestamp)
 └── updated_at (timestamp)
 
@@ -282,6 +457,30 @@ reports
 ├── answers (jsonb)
 ├── validation_warnings (jsonb)
 └── created_at (timestamp)
+
+voice_scripts
+├── id (serial, PK)
+├── session_id (FK → sessions.id, cascade delete)
+├── persona_id (varchar)
+├── report_hash (varchar) -- Cache key for invalidation
+├── language (varchar)
+├── script_json (jsonb) -- Full voice script structure
+├── audio_url (text, nullable) -- Object Storage URL
+└── created_at (timestamp)
+
+dialogue_jobs
+├── id (serial, PK)
+├── session_id (FK → sessions.id, cascade delete)
+├── persona_a (varchar) -- First reviewer in dialogue
+├── persona_b (varchar) -- Second reviewer in dialogue
+├── language (varchar)
+├── status (varchar) -- queued, generating, complete, failed
+├── script_json (jsonb, nullable) -- Dialogue script with turns
+├── audio_storage_key (text, nullable) -- Object Storage key
+├── attempt_count (integer)
+├── last_error (text, nullable)
+├── created_at (timestamp)
+└── updated_at (timestamp)
 ```
 
 ---
@@ -294,7 +493,7 @@ reports
 | CORS | Production: only `*.replit.app/dev/co` origins |
 | Input Validation | Title max 200 chars, synopsis 5K, SRT 500KB, 10 questions |
 | File Validation | Must be `video/*`, max 2GB |
-| Secrets | `GEMINI_API_KEY` never exposed to frontend |
+| Secrets | `GEMINI_API_KEY`, `ELEVENLABS_API_KEY` never exposed to frontend |
 | Error Handling | Generic messages to clients, full details logged server-side |
 
 ---
@@ -311,6 +510,11 @@ reports
 | `/api/sessions` | GET/POST | List or create sessions |
 | `/api/sessions/:id` | GET/PUT/DELETE | Session CRUD |
 | `/api/sessions/:id/reports` | GET/POST | Session reports |
+| `/api/sessions/:id/reports/:personaId/voice-script` | GET/POST | Voice script generation/retrieval |
+| `/api/dialogue/create` | POST | Start podcast dialogue job |
+| `/api/dialogue/status/:jobId` | GET | Poll dialogue job status |
+| `/api/dialogue/result/:jobId` | GET | Get completed dialogue |
+| `/api/dialogue/session/:sessionId` | GET | List dialogues for session |
 
 ---
 
@@ -323,6 +527,8 @@ reports
 | Backend | Express, TypeScript, Node.js |
 | Database | PostgreSQL + Drizzle ORM |
 | AI | Google Gemini (gemini-3-pro-preview) |
+| TTS | ElevenLabs (eleven_v3, eleven_multilingual_v2) |
+| Storage | Replit Object Storage |
 | Testing | Vitest (frontend), Jest (backend) |
 
 ---
