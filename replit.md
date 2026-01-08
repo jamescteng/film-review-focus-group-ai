@@ -1,7 +1,7 @@
 # FocalPoint AI
 
 ## Overview
-FocalPoint AI is a React + TypeScript + Vite application designed for professional indie creators. It offers advanced multimodal focus groups by leveraging Google's Gemini AI to analyze video content. The platform employs multiple configurable AI personas, each providing a distinct professional perspective on the video analysis. The core purpose is to provide creators with comprehensive feedback through AI-generated reports and innovative voice notes, enhancing their content creation process.
+FocalPoint AI is a React + TypeScript + Vite application designed for professional indie creators. It offers advanced multimodal focus groups by leveraging Google's Gemini AI to analyze video content. The platform employs multiple configurable AI personas, each providing a distinct professional perspective on the video analysis. The core purpose is to provide creators with comprehensive feedback through AI-generated reports, innovative voice notes, and podcast-style dialogues between AI reviewers.
 
 ## User Preferences
 Not specified.
@@ -43,20 +43,33 @@ FocalPoint AI utilizes a React 19 frontend with TypeScript and Vite 6, communica
     - **Three-Pass Pipeline**:
         - **Pass A (Deterministic Coverage)**: Generates a structured draft ensuring coverage of all highlights and concerns.
         - **Pass B (Conversational Naturalization)**: Uses LLM to rewrite draft into natural, speech-native text, adhering to specific linguistic rules for English and zh-TW.
-        - **Audio Generation**: Utilizes ElevenLabs v3 with audio tags for emotional direction.
-    - Supports both English and zh-TW with specific rules for naturalization.
+        - **Audio Generation**: Utilizes ElevenLabs for text-to-speech conversion.
+    - **Personalized Opening/Closing Lines**: LLM generates 2 opening + 2 closing line options tailored to each persona's role, voice style, and the specific report content. Falls back to generic lines on error.
+    - **Language-Specific Voice Models**:
+        - **English**: Uses `eleven_v3` model with stability=0.0 for natural variation. Supports audio tags for emotional direction (e.g., `<chuckle>`, `<sigh>`).
+        - **繁體中文 (zh-TW)**: Uses `eleven_multilingual_v2` model with stability=0.5 for smoother Chinese speech. Audio tags are stripped as v2 does not support them.
+    - Supports both English and zh-TW with specific naturalization rules per language.
+- **Podcast Dialogue** (English Only):
+    - **Two-Reviewer Conversation**: Generates natural dialogue between two selected AI personas discussing a video's analysis.
+    - **Dialogue Script Generation**: LLM creates a conversational script with speaker turns, references to highlights/concerns, and audio emotion tags.
+    - **ElevenLabs Text-to-Dialogue API**: Uses ElevenLabs' dialogue endpoint to generate a single audio file with distinct voices for each participant.
+    - **Language Restriction**: Only available for English sessions. ElevenLabs' text-to-dialogue API does not support non-English languages. UI shows "English Only" badge and explanatory message for zh-TW sessions.
+    - **Regeneration Support**: Users can regenerate podcast dialogue with the same reviewer pair, with existing audio preserved during regeneration.
+    - **Job-Based Processing**: Dialogue generation runs asynchronously with status polling. Jobs are persisted in `dialogueJobs` table.
 
 ### Feature Specifications
 - **Multi-Persona Analysis**: Users can select one persona initially and add more later without re-uploading the video, leveraging cached `fileUri`.
 - **Real-time Progress**: Upload and analysis progress displayed in real-time.
 - **Session Management**: PostgreSQL + Drizzle ORM for persisting sessions and reports. This includes creating, listing, retrieving, updating, and deleting sessions and associated reports.
 - **Voice Script Generation**: Generate and cache voice scripts for reports, with optional audio generation via ElevenLabs.
+- **Podcast Dialogue Generation**: Generate two-reviewer podcast-style conversations from existing reports (English only).
 
 ### System Design Choices
 - **Database**: PostgreSQL with Drizzle ORM for data persistence.
-    - `sessions` table: Stores video metadata, user questions, and language.
+    - `sessions` table: Stores video metadata, user questions, language, and persona aliases.
     - `reports` table: Stores detailed analysis reports for each persona.
     - `voice_scripts` table: Caches generated voice scripts and audio URLs.
+    - `dialogue_jobs` table: Tracks podcast dialogue generation jobs, including persona pairs, script JSON, audio storage keys, and job status.
 - **Security**:
     - `express-rate-limit` for API endpoints (e.g., upload, status, analyze).
     - CORS restrictions tailored for production (`*.repl.co`, `*.replit.dev`, `*.replit.app`) and development (`localhost:5000`).
@@ -68,5 +81,20 @@ FocalPoint AI utilizes a React 19 frontend with TypeScript and Vite 6, communica
 - **Google Gemini AI**: Used for video analysis, specifically the `gemini-3-pro-preview` model.
 - **PostgreSQL**: Relational database for session and report persistence.
 - **Drizzle ORM**: TypeScript ORM for interacting with PostgreSQL.
-- **ElevenLabs**: Third-party API for text-to-speech audio generation using `eleven_v3` model.
-- **Replit Object Storage**: Used for storing generated audio files.
+- **ElevenLabs**: Third-party API for text-to-speech audio generation.
+    - `eleven_v3` model for English voice notes (supports audio tags).
+    - `eleven_multilingual_v2` model for zh-TW voice notes.
+    - Text-to-Dialogue API for podcast generation (English only).
+- **Replit Object Storage**: Used for storing generated audio files (voice notes and podcast dialogues).
+
+## Key Files
+- `server/index.ts` - Express server entry point with all API routes
+- `server/voiceScriptService.ts` - Voice script generation pipeline
+- `server/elevenLabsService.ts` - ElevenLabs API integration for TTS and dialogues
+- `server/dialogueService.ts` - Podcast dialogue script generation
+- `server/personas.ts` - AI persona configurations
+- `shared/schema.ts` - Database schema definitions
+- `components/ScreeningRoom.tsx` - Main session view component
+- `components/VoicePlayer.tsx` - Voice note playback UI
+- `components/ReviewerPairPicker.tsx` - Podcast persona selection UI
+- `components/DialoguePlayer.tsx` - Podcast dialogue playback UI
