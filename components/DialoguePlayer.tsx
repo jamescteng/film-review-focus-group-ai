@@ -136,9 +136,19 @@ export function DialoguePlayer({
     return colors[index % colors.length];
   };
 
+  const servedAudioUrl = (() => {
+    if (audioUrl.startsWith('/api/voice-audio/') || audioUrl.startsWith('http://') || audioUrl.startsWith('https://')) {
+      return audioUrl;
+    }
+    if (audioUrl.startsWith('/objects/')) {
+      return audioUrl.replace('/objects/', '/api/voice-audio/');
+    }
+    return `/api/voice-audio/${audioUrl}`;
+  })();
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-      <audio ref={audioRef} src={`/api/voice-audio/${audioUrl}`} preload="metadata" />
+      <audio ref={audioRef} src={servedAudioUrl} preload="metadata" />
       
       <div className="p-6 border-b border-gray-200">
         <div className="flex items-center justify-between mb-4">
