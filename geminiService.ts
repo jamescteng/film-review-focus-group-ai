@@ -53,6 +53,23 @@ interface UploadJobResponse {
   error: string | null;
 }
 
+interface DirectUploadInitResponse {
+  uploadId: string;
+  storageKey: string;
+  putUrl: string;
+  headers: { 'Content-Type': string };
+  expiresInSec: number;
+}
+
+interface DirectUploadStatusResponse {
+  status: 'UPLOADING' | 'STORED' | 'TRANSFERRING_TO_GEMINI' | 'ACTIVE' | 'FAILED';
+  progress: { stage: string; pct: number };
+  geminiFileUri: string | null;
+  lastError: string | null;
+  mimeType?: string;
+  filename?: string;
+}
+
 export interface PersonaResult {
   personaId: string;
   status: 'success' | 'error';
@@ -125,6 +142,105 @@ async function pollUploadStatus(
   }
 }
 
+async function uploadToStorageWithProgress(
+  file: File,
+  putUrl: string,
+  contentType: string,
+  onProgress?: (progress: number) => void
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    
+    xhr.upload.addEventListener('progress', (event) => {
+      if (event.lengthComputable && onProgress) {
+        const rawPct = Math.floor((event.loaded / event.total) * 100);
+        const scaledPct = Math.floor(rawPct * 0.4);
+        onProgress(scaledPct);
+      }
+    });
+    
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+      } else {
+        reject(new Error(`Storage upload failed: ${xhr.status} ${xhr.statusText}`));
+      }
+    });
+    
+    xhr.addEventListener('error', () => {
+      reject(new Error('Network error during upload to storage'));
+    });
+    
+    xhr.addEventListener('abort', () => {
+      reject(new Error('Upload was aborted'));
+    });
+    
+    xhr.open('PUT', putUrl, true);
+    xhr.setRequestHeader('Content-Type', contentType);
+    xhr.send(file);
+  });
+}
+
+async function pollDirectUploadStatus(
+  uploadId: string,
+  onProgress?: (progress: number) => void,
+  onStatusMessage?: (message: string) => void
+): Promise<UploadResult> {
+  const startTime = Date.now();
+  const baseUrl = getUploadBaseUrl();
+  
+  while (true) {
+    const elapsed = Date.now() - startTime;
+    if (elapsed > MAX_POLL_TIME_MS) {
+      throw new Error('Video processing timed out. Please try again.');
+    }
+    
+    const statusUrl = `${baseUrl}/api/uploads/status/${uploadId}`;
+    const response = await fetch(statusUrl);
+    
+    if (!response.ok) {
+      const errorData = await safeJsonParse<{ error?: string }>(response);
+      throw new Error(errorData.error || `Status check failed: ${response.status}`);
+    }
+    
+    const status = await safeJsonParse<DirectUploadStatusResponse>(response);
+    
+    FocalPointLogger.info("DirectUpload_Status", { uploadId, status: status.status, progress: status.progress });
+    
+    if (status.progress) {
+      const stage = status.progress.stage;
+      const pct = status.progress.pct;
+      
+      if (stage === 'uploading') {
+        const displayProgress = Math.floor(pct * 0.4);
+        onProgress?.(displayProgress);
+      } else if (stage === 'stored') {
+        onProgress?.(40);
+      } else if (stage === 'transferring' || stage === 'processing') {
+        const displayProgress = 40 + Math.floor((pct / 100) * 55);
+        onProgress?.(displayProgress);
+        onStatusMessage?.('Preparing video for analysis...');
+      } else if (stage === 'ready') {
+        onProgress?.(100);
+      }
+    }
+    
+    if (status.status === 'ACTIVE' && status.geminiFileUri) {
+      return {
+        fileUri: status.geminiFileUri,
+        fileMimeType: status.mimeType || 'video/mp4',
+        fileName: status.filename || uploadId
+      };
+    }
+    
+    if (status.status === 'FAILED') {
+      throw new Error(status.lastError || 'Upload processing failed');
+    }
+    
+    await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+  }
+}
+
 export const uploadVideo = async (
   file: File,
   onProgress?: (progress: number) => void,
@@ -144,72 +260,72 @@ export const uploadVideo = async (
     throw new Error(`Video file is too large (${fileSizeMB}MB). Maximum size is ${MAX_VIDEO_SIZE_MB}MB.`);
   }
 
-  let lastError: Error | null = null;
+  const baseUrl = getUploadBaseUrl();
   
-  for (let attempt = 1; attempt <= MAX_UPLOAD_RETRIES; attempt++) {
-    try {
-      const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      
-      if (attempt > 1) {
-        onStatusMessage?.(`Connection interrupted. Resuming upload... (attempt ${attempt}/${MAX_UPLOAD_RETRIES})`);
-        FocalPointLogger.info("Upload_Retry", { attempt, attemptId: uploadAttemptId });
-        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
-      }
-
-      const formData = new FormData();
-      formData.append('video', file);
-
-      onProgress?.(1);
-
-      const uploadUrl = `${getUploadBaseUrl()}/api/upload`;
-      FocalPointLogger.info("Upload_Request", { url: uploadUrl, attempt, attemptId: uploadAttemptId });
-      
-      const response = await fetch(uploadUrl, {
-        method: 'POST',
-        headers: {
-          'X-Upload-Attempt-Id': uploadAttemptId,
-          'X-Request-Id': requestId
-        },
-        body: formData
-      });
-
-      if (!response.ok) {
-        const errorData = await safeJsonParse<{ error?: string }>(response);
-        throw new Error(errorData.error || `Upload failed: ${response.status}`);
-      }
-
-      const startResult = await safeJsonParse<{ jobId: string; status: string; message?: string }>(response);
-      
-      if (startResult.message?.includes('already in progress')) {
-        FocalPointLogger.info("Upload_Resumed", { jobId: startResult.jobId });
-        onStatusMessage?.('Resuming previous upload...');
-      } else {
-        FocalPointLogger.info("Upload_JobCreated", { jobId: startResult.jobId });
-      }
-      
-      onProgress?.(3);
-      onStatusMessage?.('Processing video...');
-
-      const result = await pollUploadStatus(startResult.jobId, onProgress, onStatusMessage);
-      FocalPointLogger.info("Upload_Complete", result);
-      
-      return result;
-      
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-      FocalPointLogger.warn("Upload_Error", `Attempt ${attempt} failed: ${lastError.message}`);
-      
-      if (!isConnectionError(error) || attempt === MAX_UPLOAD_RETRIES) {
-        break;
-      }
+  try {
+    onProgress?.(1);
+    onStatusMessage?.('Initializing upload...');
+    
+    const initResponse = await fetch(`${baseUrl}/api/uploads/init`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filename: file.name,
+        mimeType: file.type || 'video/mp4',
+        sizeBytes: file.size,
+        attemptId: uploadAttemptId,
+      }),
+    });
+    
+    if (!initResponse.ok) {
+      const errorData = await safeJsonParse<{ error?: string }>(initResponse);
+      throw new Error(errorData.error || `Failed to initialize upload: ${initResponse.status}`);
     }
+    
+    const initResult = await safeJsonParse<DirectUploadInitResponse>(initResponse);
+    FocalPointLogger.info("DirectUpload_Init", { uploadId: initResult.uploadId });
+    
+    onProgress?.(2);
+    onStatusMessage?.('Uploading to storage...');
+    
+    await uploadToStorageWithProgress(
+      file,
+      initResult.putUrl,
+      initResult.headers['Content-Type'],
+      onProgress
+    );
+    
+    FocalPointLogger.info("DirectUpload_StorageComplete", { uploadId: initResult.uploadId });
+    onProgress?.(40);
+    onStatusMessage?.('Verifying upload...');
+    
+    const completeResponse = await fetch(`${baseUrl}/api/uploads/complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uploadId: initResult.uploadId }),
+    });
+    
+    if (!completeResponse.ok) {
+      const errorData = await safeJsonParse<{ error?: string }>(completeResponse);
+      throw new Error(errorData.error || `Failed to complete upload: ${completeResponse.status}`);
+    }
+    
+    FocalPointLogger.info("DirectUpload_Completed", { uploadId: initResult.uploadId });
+    onStatusMessage?.('Preparing video for analysis...');
+    
+    const result = await pollDirectUploadStatus(initResult.uploadId, onProgress, onStatusMessage);
+    FocalPointLogger.info("DirectUpload_Ready", result);
+    
+    return {
+      ...result,
+      fileName: file.name,
+    };
+    
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    FocalPointLogger.error("DirectUpload_Error", err.message);
+    throw err;
   }
-  
-  if (lastError && isConnectionError(lastError)) {
-    throw new Error('Upload failed after multiple attempts. Please check your connection and try again.');
-  }
-  
-  throw lastError || new Error('Upload failed unexpectedly');
 };
 
 export const analyzeWithPersona = async (

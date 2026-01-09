@@ -175,7 +175,7 @@ const App: React.FC = () => {
         currentUploadResult = await uploadVideo(
           p.videoFile, 
           (progress) => {
-            setProcessProgress(Math.floor(progress * 0.4));
+            setProcessProgress(progress);
           }, 
           attemptId,
           (message) => {
@@ -183,7 +183,6 @@ const App: React.FC = () => {
           }
         );
         setUploadResult(currentUploadResult);
-        setProcessProgress(40);
         setStatusMessage(isZH ? "視頻處理完成" : "Video uploaded and processed");
         
         if (sessionId) {

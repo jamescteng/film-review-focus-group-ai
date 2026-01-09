@@ -1,0 +1,150 @@
+Option 1 MVP: Direct-to-Storage Upload (Presigned PUT) + “Complete”
+What you ship in the first iteration
+
+Client
+
+Call POST /api/uploads/init (small JSON)
+
+Upload file directly to Object Storage using the returned presigned URL
+
+Call POST /api/uploads/complete
+
+Poll GET /api/uploads/status/:uploadId until READY/ACTIVE
+
+Server
+
+Only signs URLs and runs background work; it never receives the large video body.
+
+Backend API (minimal contracts)
+1) POST /api/uploads/init
+
+Request
+
+{
+  "filename": "myfilm.mp4",
+  "mimeType": "video/mp4",
+  "sizeBytes": 312344722,
+  "attemptId": "attempt_....",
+  "sessionId": 123
+}
+
+
+Response
+
+{
+  "uploadId": "upl_....",
+  "storageKey": "sessions/123/upl_.../myfilm.mp4",
+  "putUrl": "https://...presigned...",
+  "headers": { "Content-Type": "video/mp4" },
+  "expiresInSec": 900
+}
+
+
+Server validations (MVP)
+
+mimeType starts with video/ (or allowlist)
+
+sizeBytes <= your max (2GB or whatever you enforce)
+
+attemptId required (for idempotency)
+
+Idempotency rule (important, cheap)
+
+If same attemptId is used again, return the same uploadId and putUrl (or a fresh URL for the same storageKey).
+
+2) POST /api/uploads/complete
+
+Request
+
+{ "uploadId": "upl_...." }
+
+
+Server does
+
+HEAD the object in storage by storageKey
+
+Verify size matches sizeBytes recorded at init
+
+Mark upload as STORED
+
+Response
+
+{ "status": "STORED" }
+
+3) GET /api/uploads/status/:uploadId
+
+Returns:
+
+{
+  "status": "UPLOADING|STORED|TRANSFERRING_TO_GEMINI|ACTIVE|FAILED",
+  "progress": { "stage": "...", "pct": 0-100 },
+  "geminiFileUri": "https://generativelanguage.googleapis.com/v1beta/files/..."
+}
+
+Background job (MVP version)
+
+After complete, run async:
+
+stream/download from Object Storage
+
+upload to Gemini File API (resumable)
+
+poll to ACTIVE
+
+store geminiFileUri on the upload record
+
+Note: This preserves your current Gemini integration and keeps the Gemini key server-side.
+
+Frontend implementation (minimal)
+
+Replace POST /api/upload with:
+
+init → direct PUT to storage → complete
+
+Show real upload progress:
+
+Use XMLHttpRequest for progress events (simplest)
+
+fetch doesn’t reliably expose upload progress in all environments
+
+UX
+
+Stage 1: “Uploading to storage (xx%)”
+
+Stage 2: “Preparing video for analysis…”
+
+Stage 3: “Ready”
+
+What you can defer (to keep speed)
+
+Multipart upload (do single PUT first)
+
+Resume from refresh/localStorage
+
+Auto-cleanup policies
+
+Fancy dedupe across filenames/hashes
+
+Two guardrails you should NOT skip (still fast)
+
+Short presign TTL (10–15 minutes)
+
+Server-side verify object size on complete (prevents abuse/mis-clicks)
+
+One practical caution
+
+If your videos are often hundreds of MB to 2GB, single PUT may still fail on flaky connections. That’s OK for v1, but plan a v1.1:
+
+multipart uploads
+
+resume/retry without restarting from 0
+
+Summary you can hand to your dev
+
+Implement init/complete/status
+
+Direct upload browser → Object Storage via presigned PUT
+
+Background job transfers storage → Gemini and polls ACTIVE
+
+UI shows progress per stage

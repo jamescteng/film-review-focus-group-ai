@@ -144,6 +144,34 @@ export const dialogueJobsRelations = relations(dialogueJobs, ({ one }) => ({
   }),
 }));
 
+// Upload tracking for direct-to-storage uploads
+export const uploads = pgTable("uploads", {
+  id: serial("id").primaryKey(),
+  uploadId: varchar("upload_id", { length: 64 }).notNull().unique(),
+  sessionId: integer("session_id").references(() => sessions.id, { onDelete: "cascade" }),
+  attemptId: varchar("attempt_id", { length: 64 }).notNull(),
+  filename: text("filename").notNull(),
+  mimeType: varchar("mime_type", { length: 100 }).notNull(),
+  sizeBytes: bigint("size_bytes", { mode: "number" }).notNull(),
+  storageKey: text("storage_key").notNull(),
+  status: varchar("status", { length: 30 }).notNull().default("UPLOADING"),
+  geminiFileUri: text("gemini_file_uri"),
+  progress: jsonb("progress").$type<{ stage: string; pct: number }>().default({ stage: "uploading", pct: 0 }),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const uploadsRelations = relations(uploads, ({ one }) => ({
+  session: one(sessions, {
+    fields: [uploads.sessionId],
+    references: [sessions.id],
+  }),
+}));
+
+export type Upload = typeof uploads.$inferSelect;
+export type InsertUpload = typeof uploads.$inferInsert;
+
 export type Session = typeof sessions.$inferSelect;
 export type InsertSession = typeof sessions.$inferInsert;
 export type Report = typeof reports.$inferSelect;
