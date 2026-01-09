@@ -24,7 +24,15 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
-const PORT = isProduction ? 5000 : 3001;
+// Use PORT env var for Cloud Run/Replit deployments, fallback to 5000 in production, 3001 in dev
+const PORT = Number(process.env.PORT) || (isProduction ? 5000 : 3001);
+console.log(`[FocalPoint] Configured PORT: ${PORT} (isProduction: ${isProduction}, env.PORT: ${process.env.PORT || 'not set'})`);
+
+// Unthrottled health check endpoint - placed before all other middleware
+// This ensures deployment health probes always get a fast 200 response
+app.get('/healthz', (req, res) => {
+  res.status(200).send('ok');
+});
 
 // Trust the first proxy (Replit / load balancer)
 app.set('trust proxy', 1);
