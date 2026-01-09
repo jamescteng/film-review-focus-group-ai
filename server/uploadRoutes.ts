@@ -361,6 +361,7 @@ async function transferToGemini(uploadId: string): Promise<void> {
 
         offset += chunk.length;
         const pct = Math.min(99, Math.floor((offset / upload.sizeBytes) * 100));
+        console.log(`[Upload] Gemini transfer ${uploadId}: ${pct}% (${Math.round(offset / 1024 / 1024)}MB / ${Math.round(upload.sizeBytes / 1024 / 1024)}MB)`);
         
         await db
           .update(uploads)
@@ -387,6 +388,8 @@ async function transferToGemini(uploadId: string): Promise<void> {
         const errText = await uploadResponse.text();
         throw new Error(`Final chunk upload failed: ${errText}`);
       }
+
+      console.log(`[Upload] Gemini transfer ${uploadId}: 100% - upload complete, waiting for processing...`);
 
       const result = await uploadResponse.json();
       const geminiFile = result.file;

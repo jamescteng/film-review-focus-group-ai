@@ -19,8 +19,8 @@ export default defineConfig(() => {
                 console.log('[Vite Proxy] Error:', err.message);
               });
               proxy.on('proxyReq', (proxyReq, req) => {
-                if (req.url?.includes('/upload')) {
-                  console.log('[Vite Proxy] Starting large file upload...');
+                if (req.url?.includes('/uploads/init') || req.url?.includes('/uploads/complete')) {
+                  console.log('[Vite Proxy] Upload request:', req.url);
                 }
               });
             }
