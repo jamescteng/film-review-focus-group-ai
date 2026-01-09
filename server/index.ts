@@ -28,10 +28,15 @@ const isProduction = process.env.NODE_ENV === 'production';
 const PORT = Number(process.env.PORT) || (isProduction ? 5000 : 3001);
 console.log(`[FocalPoint] Configured PORT: ${PORT} (isProduction: ${isProduction}, env.PORT: ${process.env.PORT || 'not set'})`);
 
-// Unthrottled health check endpoint - placed before all other middleware
+// Unthrottled health check endpoints - placed before all other middleware
 // This ensures deployment health probes always get a fast 200 response
 app.get('/healthz', (req, res) => {
   res.status(200).send('ok');
+});
+
+// Also handle root health check for deployments that probe /
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: Date.now() });
 });
 
 // Trust the first proxy (Replit / load balancer)
