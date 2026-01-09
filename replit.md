@@ -19,16 +19,17 @@ FocalPoint AI utilizes a React 19 frontend with TypeScript and Vite 6, communica
 - **Backend**: Express server on port 3001, binding to 0.0.0.0.
 - **API Proxy**: Vite proxies `/api` requests to the Express backend.
 - **Security**: Gemini API key stored as a secret (`GEMINI_API_KEY`) and never exposed to the frontend.
-- **Video Upload**:
-    - Asynchronous, job-based architecture with immediate response upon file reception.
-    - Busboy for streaming multipart parsing.
-    - Temporary spool files for incoming video streams.
-    - Background processing for uploading to Gemini in 16MB chunks (resumable upload).
-    - Frontend polls for real-time status updates.
-    - In-memory job store with TTL for tracking upload status.
-    - Upload idempotency using `X-Upload-Attempt-Id` header to prevent re-uploads.
-    - Stale job recovery mechanism for abandoned uploads.
-    - Automatic retry logic (up to 3 times) for connection errors during upload.
+- **Video Upload** (Direct-to-Storage Architecture):
+    - **Three-Stage Flow**: Browser uploads directly to Object Storage via presigned URL, then server transfers to Gemini in background.
+    - **Stage 1 - Storage Upload**: Frontend requests presigned PUT URL via `/api/uploads/init`, then uploads directly using XMLHttpRequest with progress events (0-40% UI progress).
+    - **Stage 2 - Preparing**: After upload completes, frontend calls `/api/uploads/complete` to verify size, then server transfers to Gemini File API in 16MB chunks (40-95% UI progress).
+    - **Stage 3 - Ready**: Gemini processes file until ACTIVE state (100% UI progress).
+    - **Status Polling**: Frontend polls `/api/uploads/status/:uploadId` for progress updates with exponential backoff.
+    - **Idempotency**: Same `attemptId` returns same `uploadId`/presigned URL for retry support.
+    - **Size Verification**: Server verifies uploaded file size matches declared size (hard failure on mismatch >1KB).
+    - **MIME Type Preservation**: Actual file MIME type flows through entire pipeline.
+    - **Presigned URL TTL**: 15 minutes for upload completion.
+    - **Database Tracking**: `uploads` table tracks state machine: UPLOADING → STORED → TRANSFERRING_TO_GEMINI → ACTIVE (or FAILED).
     - Maximum video size: 2GB.
 - **Persona System**:
     - **"House Style + Persona Edge" pattern**: Shared `HOUSE_STYLE_GUIDELINES`, `OUTPUT_CONSTRAINTS_REMINDER`, and `SUMMARY_READABILITY_GUIDELINES` ensure consistent tone and formatting across all persona analyses, while `RAW_PERSONA_CONFIGS` define unique aspects.
@@ -70,6 +71,7 @@ FocalPoint AI utilizes a React 19 frontend with TypeScript and Vite 6, communica
     - `reports` table: Stores detailed analysis reports for each persona.
     - `voice_scripts` table: Caches generated voice scripts and audio URLs.
     - `dialogue_jobs` table: Tracks podcast dialogue generation jobs, including persona pairs, script JSON, audio storage keys, and job status.
+    - `uploads` table: Tracks direct-to-storage video uploads with state machine (uploadId, storageKey, status, geminiFileUri, progress).
 - **Security**:
     - `express-rate-limit` for API endpoints (e.g., upload, status, analyze).
     - CORS restrictions tailored for production (`*.repl.co`, `*.replit.dev`, `*.replit.app`) and development (`localhost:5000`).
@@ -98,3 +100,4 @@ FocalPoint AI utilizes a React 19 frontend with TypeScript and Vite 6, communica
 - `components/VoicePlayer.tsx` - Voice note playback UI
 - `components/ReviewerPairPicker.tsx` - Podcast persona selection UI
 - `components/DialoguePlayer.tsx` - Podcast dialogue playback UI
+- `server/uploadRoutes.ts` - Direct-to-storage upload endpoints and Gemini transfer logic
