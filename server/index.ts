@@ -1826,7 +1826,9 @@ app.post('/api/analyze', analyzeLimiter, async (req, res) => {
 });
 
 if (isProduction) {
-  app.get('/*', (req, res) => {
+  // Express v5-compliant SPA catch-all - serves index.html for all unmatched routes
+  // {*splat} syntax includes the root path and is required for path-to-regexp v8+
+  app.get('/{*splat}', (req, res) => {
     res.sendFile(path.join(__dirname, '../dist/index.html'));
   });
 }
