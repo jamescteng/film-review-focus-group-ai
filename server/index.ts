@@ -34,9 +34,18 @@ app.get('/healthz', (req, res) => {
   res.status(200).send('ok');
 });
 
-// Also handle root health check for deployments that probe /
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: Date.now() });
+});
+
+// Root health check - returns quick response for deployment probes
+// In production, if Accept header indicates HTML, let static serve the SPA
+app.get('/', (req, res, next) => {
+  const acceptHeader = req.get('Accept') || '';
+  if (acceptHeader.includes('text/html')) {
+    return next();
+  }
+  res.status(200).send('ok');
 });
 
 // Trust the first proxy (Replit / load balancer)
