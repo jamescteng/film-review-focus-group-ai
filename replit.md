@@ -90,14 +90,34 @@ FocalPoint AI utilizes a React 19 frontend with TypeScript and Vite 6, communica
 - **Replit Object Storage**: Used for direct-to-storage video uploads and generated audio files (voice notes and podcast dialogues).
 
 ## Key Files
-- `server/index.ts` - Express server entry point with all API routes
+
+### Server (Modular Route Structure)
+- `server/index.ts` - Express server entry point (~175 lines, mounts all route modules)
+- `server/routes/sessions.ts` - Session CRUD endpoints
+- `server/routes/reports.ts` - Report get/save endpoints
+- `server/routes/voice.ts` - Voice script generation, audio streaming
+- `server/routes/analyze.ts` - Video analysis endpoint
+- `server/uploadRoutes.ts` - Direct-to-storage upload endpoints and Gemini transfer logic
+- `server/middleware/validation.ts` - Shared input validation middleware
+- `server/middleware/rateLimiting.ts` - Rate limiting configuration
+- `server/utils/personaAliases.ts` - Persona alias generation utility
+
+### Server Services
 - `server/voiceScriptService.ts` - Voice script generation pipeline
 - `server/elevenLabsService.ts` - ElevenLabs API integration for TTS and dialogues
 - `server/dialogueService.ts` - Podcast dialogue script generation
 - `server/personas.ts` - AI persona configurations
-- `shared/schema.ts` - Database schema definitions
-- `components/ScreeningRoom.tsx` - Main session view component
+- `server/geminiService.ts` - Gemini AI integration
+
+### Frontend Components
+- `components/ScreeningRoom.tsx` - Main session view component (~706 lines)
+- `components/HighlightCard.tsx` - Highlight display with HighlightsList
+- `components/ConcernCard.tsx` - Concern display with ConcernsList
+- `components/ui/ExpandableContent.tsx` - Truncated text with expand/collapse
+- `components/ui/reportHelpers.ts` - Category icons, formatters
 - `components/VoicePlayer.tsx` - Voice note playback UI
 - `components/ReviewerPairPicker.tsx` - Podcast persona selection UI
 - `components/DialoguePlayer.tsx` - Podcast dialogue playback UI
-- `server/uploadRoutes.ts` - Direct-to-storage upload endpoints and Gemini transfer logic
+
+### Shared
+- `shared/schema.ts` - Database schema definitions (Drizzle ORM)
