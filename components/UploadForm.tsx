@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from './Button';
 import { Project } from '../types';
 import { INITIAL_QUESTIONS, PERSONAS } from '../constants.tsx';
@@ -20,6 +20,14 @@ function extractYoutubeVideoId(url: string): string | null {
 }
 
 type VideoSourceType = 'upload' | 'youtube';
+type YoutubeValidationStatus = 'idle' | 'validating' | 'valid' | 'invalid';
+
+interface YoutubeValidation {
+  status: YoutubeValidationStatus;
+  title?: string;
+  author?: string;
+  error?: string;
+}
 
 export const UploadForm: React.FC<UploadFormProps> = ({ onStart, isSubmitting = false }) => {
   const [title, setTitle] = useState('');
@@ -28,14 +36,68 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onStart, isSubmitting = 
   const [videoSourceType, setVideoSourceType] = useState<VideoSourceType>('upload');
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [youtubeError, setYoutubeError] = useState('');
+  const [youtubeValidation, setYoutubeValidation] = useState<YoutubeValidation>({ status: 'idle' });
   const [language, setLanguage] = useState<'en' | 'zh-TW'>('en');
   const [questions, setQuestions] = useState<string[]>(INITIAL_QUESTIONS);
   const [selectedPersonaId, setSelectedPersonaId] = useState<string>('acquisitions_director');
+  const validationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (validationTimeoutRef.current) {
+      clearTimeout(validationTimeoutRef.current);
+    }
+
+    if (!youtubeUrl || !isValidYoutubeUrl(youtubeUrl)) {
+      setYoutubeValidation({ status: 'idle' });
+      return;
+    }
+
+    setYoutubeValidation({ status: 'validating' });
+
+    validationTimeoutRef.current = setTimeout(async () => {
+      try {
+        const response = await fetch('/api/sessions/validate-youtube', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ youtubeUrl }),
+        });
+        const data = await response.json();
+        
+        if (data.valid) {
+          setYoutubeValidation({
+            status: 'valid',
+            title: data.title,
+            author: data.author,
+          });
+          setYoutubeError('');
+        } else {
+          setYoutubeValidation({
+            status: 'invalid',
+            error: data.error,
+          });
+          setYoutubeError(data.error || 'This video cannot be accessed');
+        }
+      } catch (error) {
+        setYoutubeValidation({
+          status: 'invalid',
+          error: 'Failed to verify video. Please try again.',
+        });
+        setYoutubeError('Failed to verify video. Please try again.');
+      }
+    }, 500);
+
+    return () => {
+      if (validationTimeoutRef.current) {
+        clearTimeout(validationTimeoutRef.current);
+      }
+    };
+  }, [youtubeUrl]);
 
   const handleYoutubeUrlChange = (url: string) => {
     setYoutubeUrl(url);
     if (url && !isValidYoutubeUrl(url)) {
       setYoutubeError('Please enter a valid YouTube URL');
+      setYoutubeValidation({ status: 'idle' });
     } else {
       setYoutubeError('');
     }
@@ -46,7 +108,7 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onStart, isSubmitting = 
     if (videoSourceType === 'upload') {
       return !!videoFile;
     } else {
-      return youtubeUrl && isValidYoutubeUrl(youtubeUrl);
+      return youtubeUrl && isValidYoutubeUrl(youtubeUrl) && youtubeValidation.status === 'valid';
     }
   };
 
@@ -200,11 +262,30 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onStart, isSubmitting = 
               </div>
             ) : (
               <div className="space-y-2">
-                <div className="flex flex-col items-center justify-center w-full h-48 border-2 border-slate-200 bg-slate-50 rounded-xl p-4">
-                  <div className="w-10 h-10 bg-red-600 rounded-xl flex items-center justify-center mb-3">
-                    <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/>
-                    </svg>
+                <div className={`flex flex-col items-center justify-center w-full h-48 border-2 rounded-xl p-4 transition-all ${
+                  youtubeValidation.status === 'valid' 
+                    ? 'border-green-300 bg-green-50' 
+                    : youtubeValidation.status === 'invalid' 
+                    ? 'border-red-300 bg-red-50' 
+                    : 'border-slate-200 bg-slate-50'
+                }`}>
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${
+                    youtubeValidation.status === 'valid' ? 'bg-green-600' : 'bg-red-600'
+                  }`}>
+                    {youtubeValidation.status === 'validating' ? (
+                      <svg className="w-5 h-5 text-white animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : youtubeValidation.status === 'valid' ? (
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/>
+                      </svg>
+                    )}
                   </div>
                   <input
                     type="url"
@@ -213,13 +294,26 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onStart, isSubmitting = 
                     onChange={(e) => handleYoutubeUrlChange(e.target.value)}
                     className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-sm focus:border-slate-900 focus:ring-1 focus:ring-slate-900 outline-none transition-all text-slate-900 placeholder:text-slate-300"
                   />
-                  {youtubeError ? (
-                    <p className="text-xs text-red-500 mt-1">{youtubeError}</p>
-                  ) : youtubeUrl && isValidYoutubeUrl(youtubeUrl) ? (
-                    <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" /></svg>
-                      Valid YouTube URL
+                  {youtubeValidation.status === 'validating' ? (
+                    <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
+                      <span className="inline-block w-2 h-2 bg-slate-400 rounded-full animate-pulse"></span>
+                      Checking video accessibility...
                     </p>
+                  ) : youtubeValidation.status === 'valid' ? (
+                    <div className="text-center mt-2">
+                      <p className="text-xs text-green-700 font-medium flex items-center justify-center gap-1">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" /></svg>
+                        Video found
+                      </p>
+                      {youtubeValidation.title && (
+                        <p className="text-[10px] text-slate-500 mt-0.5 truncate max-w-[250px]">
+                          {youtubeValidation.title} {youtubeValidation.author && `by ${youtubeValidation.author}`}
+                        </p>
+                      )}
+                      <p className="text-[10px] text-slate-400 mt-1">Public videos work best for analysis</p>
+                    </div>
+                  ) : youtubeError ? (
+                    <p className="text-xs text-red-600 mt-1 text-center">{youtubeError}</p>
                   ) : (
                     <p className="text-[10px] text-slate-400 mt-1">Paste a public YouTube video URL</p>
                   )}

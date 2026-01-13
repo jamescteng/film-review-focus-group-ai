@@ -128,4 +128,52 @@ router.delete('/:id', statusLimiter, async (req, res) => {
   }
 });
 
+router.post('/validate-youtube', statusLimiter, async (req, res) => {
+  try {
+    const { youtubeUrl } = req.body;
+    
+    if (!youtubeUrl || typeof youtubeUrl !== 'string') {
+      return res.status(400).json({ valid: false, error: 'YouTube URL is required.' });
+    }
+    
+    if (!isValidYoutubeUrl(youtubeUrl)) {
+      return res.status(400).json({ valid: false, error: 'Invalid YouTube URL format.' });
+    }
+    
+    const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(youtubeUrl)}&format=json`;
+    
+    const response = await fetch(oembedUrl);
+    
+    if (response.ok) {
+      const data = await response.json();
+      return res.json({ 
+        valid: true, 
+        title: data.title,
+        author: data.author_name
+      });
+    } else if (response.status === 401 || response.status === 403) {
+      return res.json({ 
+        valid: false, 
+        error: 'This video is private or unlisted. Please use a public YouTube video.' 
+      });
+    } else if (response.status === 404) {
+      return res.json({ 
+        valid: false, 
+        error: 'Video not found. Please check the URL and try again.' 
+      });
+    } else {
+      return res.json({ 
+        valid: false, 
+        error: 'Unable to verify video accessibility. Please try again.' 
+      });
+    }
+  } catch (error: any) {
+    FocalPointLogger.error("YouTube_Validate", error.message);
+    return res.status(500).json({ 
+      valid: false, 
+      error: 'Failed to validate YouTube URL. Please try again.' 
+    });
+  }
+});
+
 export default router;
