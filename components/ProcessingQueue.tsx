@@ -10,7 +10,7 @@ interface ProcessingQueueProps {
 }
 
 export const ProcessingQueue: React.FC<ProcessingQueueProps> = ({ personas, currentIndex, progress }) => {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const currentPersona = personas[currentIndex];
   
   const translatedRole = t(`personas.${currentPersona.id}.role`, { defaultValue: currentPersona.role });
