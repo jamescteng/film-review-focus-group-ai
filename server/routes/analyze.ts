@@ -180,7 +180,7 @@ async function analyzeWithPersona(
     return {
       personaId: persona.id,
       status: 'error' as const,
-      error: error.message
+      error: 'Analysis failed. Please try again.'
     };
   }
 }

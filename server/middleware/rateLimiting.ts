@@ -44,3 +44,27 @@ export const uploadLimiterByAttemptId = rateLimit({
   legacyHeaders: false,
   validate: { xForwardedForHeader: false, keyGeneratorIpFallback: false },
 });
+
+export const voiceAudioLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 1, // 1 voice audio generation per minute per IP
+  message: { error: 'Voice generation limit reached. Please wait a minute before generating another.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+export const dialogueCreateLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 1, // 1 podcast creation per minute per IP
+  message: { error: 'Podcast generation limit reached. Please wait a minute before creating another.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+export const dialogueStatusLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 20, // 20 status/result requests per minute per IP
+  message: { error: 'Too many requests. Please slow down.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});

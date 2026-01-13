@@ -1,9 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { createDialogueJob, getDialogueJobStatus, getDialogueJobResult, getSessionDialogues } from './dialogueService';
+import { dialogueCreateLimiter, dialogueStatusLimiter } from './middleware/rateLimiting.js';
+import { FocalPointLogger } from './utils/logger.js';
 
 const router = Router();
 
-router.post('/create', async (req: Request, res: Response) => {
+router.post('/create', dialogueCreateLimiter, async (req: Request, res: Response) => {
   try {
     const { sessionId, personaIdA, personaIdB, language } = req.body;
 
@@ -35,14 +37,12 @@ router.post('/create', async (req: Request, res: Response) => {
 
     return res.json({ jobId: result.jobId });
   } catch (error) {
-    console.error('[Dialogue Route] Create error:', error);
-    return res.status(500).json({ 
-      error: error instanceof Error ? error.message : 'Failed to create dialogue job' 
-    });
+    FocalPointLogger.error("Dialogue_Create", error instanceof Error ? error.message : 'Unknown error');
+    return res.status(500).json({ error: 'Failed to create dialogue. Please try again.' });
   }
 });
 
-router.get('/status/:jobId', async (req: Request, res: Response) => {
+router.get('/status/:jobId', dialogueStatusLimiter, async (req: Request, res: Response) => {
   try {
     const jobId = parseInt(req.params.jobId, 10);
     
@@ -58,14 +58,12 @@ router.get('/status/:jobId', async (req: Request, res: Response) => {
 
     return res.json(status);
   } catch (error) {
-    console.error('[Dialogue Route] Status error:', error);
-    return res.status(500).json({ 
-      error: error instanceof Error ? error.message : 'Failed to get job status' 
-    });
+    FocalPointLogger.error("Dialogue_Status", error instanceof Error ? error.message : 'Unknown error');
+    return res.status(500).json({ error: 'Failed to get status. Please try again.' });
   }
 });
 
-router.get('/result/:jobId', async (req: Request, res: Response) => {
+router.get('/result/:jobId', dialogueStatusLimiter, async (req: Request, res: Response) => {
   try {
     const jobId = parseInt(req.params.jobId, 10);
     
@@ -81,14 +79,12 @@ router.get('/result/:jobId', async (req: Request, res: Response) => {
 
     return res.json(result);
   } catch (error) {
-    console.error('[Dialogue Route] Result error:', error);
-    return res.status(500).json({ 
-      error: error instanceof Error ? error.message : 'Failed to get job result' 
-    });
+    FocalPointLogger.error("Dialogue_Result", error instanceof Error ? error.message : 'Unknown error');
+    return res.status(500).json({ error: 'Failed to get result. Please try again.' });
   }
 });
 
-router.get('/session/:sessionId', async (req: Request, res: Response) => {
+router.get('/session/:sessionId', dialogueStatusLimiter, async (req: Request, res: Response) => {
   try {
     const sessionId = parseInt(req.params.sessionId, 10);
     
@@ -100,10 +96,8 @@ router.get('/session/:sessionId', async (req: Request, res: Response) => {
     
     return res.json({ dialogues });
   } catch (error) {
-    console.error('[Dialogue Route] Session dialogues error:', error);
-    return res.status(500).json({ 
-      error: error instanceof Error ? error.message : 'Failed to get session dialogues' 
-    });
+    FocalPointLogger.error("Dialogue_SessionList", error instanceof Error ? error.message : 'Unknown error');
+    return res.status(500).json({ error: 'Failed to get dialogues. Please try again.' });
   }
 });
 

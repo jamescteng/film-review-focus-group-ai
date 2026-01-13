@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { storage } from '../storage.js';
 import { FocalPointLogger } from '../utils/logger.js';
-import { statusLimiter } from '../middleware/rateLimiting.js';
+import { statusLimiter, voiceAudioLimiter } from '../middleware/rateLimiting.js';
 import { getPersonaById } from '../personas.js';
 import { 
   generateVoiceScript, 
@@ -132,7 +132,7 @@ router.post('/:sessionId/reports/:personaId/voice-script', statusLimiter, async 
   }
 });
 
-router.post('/:sessionId/reports/:personaId/voice-audio', statusLimiter, async (req, res) => {
+router.post('/:sessionId/reports/:personaId/voice-audio', voiceAudioLimiter, async (req, res) => {
   try {
     const sessionId = parseInt(req.params.sessionId, 10);
     const personaId = req.params.personaId;
