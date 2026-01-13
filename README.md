@@ -18,6 +18,7 @@ Get focus group-style feedback through configurable AI personas, each offering a
 - **Multi-Language** - English or Traditional Chinese output
 - **Session Persistence** - Resume sessions anytime, all reports saved automatically
 - **Secure** - API keys stay on the backend with rate limiting and input validation
+- **Request Tracing** - Every API request has a correlation ID for end-to-end debugging
 
 ## Personas
 
@@ -30,7 +31,7 @@ Get focus group-style feedback through configurable AI personas, each offering a
 
 ## Tech Stack
 
-- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS
+- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS (via PostCSS)
 - **Backend**: Express.js with direct-to-storage uploads
 - **AI**: Google Gemini API (`gemini-3-pro-preview`)
 - **TTS**: ElevenLabs (`eleven_v3` for English, `eleven_multilingual_v2` for zh-TW)
@@ -98,6 +99,10 @@ Generate natural two-person conversations between any pair of reviewers:
 - Maximum video size: 2GB
 - Video retention on Gemini: 48 hours
 - 5 highlights + 5 concerns per report (enforced)
+
+## Debugging
+
+Error messages include a reference ID (e.g., `Ref: a7424d7a`) that matches server logs for easy troubleshooting. All API requests are traced end-to-end with correlation IDs.
 
 ### Typical Processing Times (300MB video)
 | Stage | Duration |
