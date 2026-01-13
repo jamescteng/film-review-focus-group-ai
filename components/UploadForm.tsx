@@ -32,14 +32,16 @@ interface YoutubeValidation {
   embeddable?: boolean;
 }
 
+const DEFAULT_QUESTION_KEYS = [
+  'uploadForm.defaultQuestion1',
+  'uploadForm.defaultQuestion2', 
+  'uploadForm.defaultQuestion3',
+] as const;
+
 export const UploadForm: React.FC<UploadFormProps> = ({ onStart, isSubmitting = false }) => {
   const { t, i18n } = useTranslation();
   
-  const getDefaultQuestions = () => [
-    t('uploadForm.defaultQuestion1'),
-    t('uploadForm.defaultQuestion2'),
-    t('uploadForm.defaultQuestion3'),
-  ];
+  const getDefaultQuestions = () => DEFAULT_QUESTION_KEYS.map(key => t(key));
   
   const [title, setTitle] = useState('');
   const [synopsis, setSynopsis] = useState('');
@@ -52,11 +54,29 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onStart, isSubmitting = 
   const [questions, setQuestions] = useState<string[]>(getDefaultQuestions());
   const [selectedPersonaId, setSelectedPersonaId] = useState<string>('acquisitions_director');
   const validationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const prevLanguageRef = useRef<string>(i18n.language);
 
   useEffect(() => {
-    setLanguage(i18n.language === 'zh-TW' ? 'zh-TW' : 'en');
-    setQuestions(getDefaultQuestions());
-  }, [i18n.language]);
+    const prevLang = prevLanguageRef.current;
+    const newLang = i18n.language;
+    setLanguage(newLang === 'zh-TW' ? 'zh-TW' : 'en');
+    
+    if (prevLang !== newLang) {
+      const oldDefaultsMap = new Map(
+        DEFAULT_QUESTION_KEYS.map(key => [t(key, { lng: prevLang }), key])
+      );
+      
+      setQuestions(prev => prev.map(q => {
+        const translationKey = oldDefaultsMap.get(q);
+        if (translationKey) {
+          return t(translationKey, { lng: newLang });
+        }
+        return q;
+      }));
+      
+      prevLanguageRef.current = newLang;
+    }
+  }, [i18n.language, t]);
 
   useEffect(() => {
     if (validationTimeoutRef.current) {
