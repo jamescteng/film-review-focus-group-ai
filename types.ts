@@ -62,6 +62,7 @@ export interface Project {
   videoUrl?: string;
   videoFile?: File;
   videoFingerprint?: VideoFingerprint;
+  youtubeUrl?: string;
   questions: string[];
   language: 'en' | 'zh-TW';
   selectedPersonaIds: string[];

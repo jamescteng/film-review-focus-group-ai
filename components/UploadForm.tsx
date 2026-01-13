@@ -8,33 +8,79 @@ interface UploadFormProps {
   isSubmitting?: boolean;
 }
 
+const YOUTUBE_URL_REGEX = /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[a-zA-Z0-9_-]{11}/;
+
+function isValidYoutubeUrl(url: string): boolean {
+  return YOUTUBE_URL_REGEX.test(url);
+}
+
+function extractYoutubeVideoId(url: string): string | null {
+  const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  return match ? match[1] : null;
+}
+
+type VideoSourceType = 'upload' | 'youtube';
+
 export const UploadForm: React.FC<UploadFormProps> = ({ onStart, isSubmitting = false }) => {
   const [title, setTitle] = useState('');
   const [synopsis, setSynopsis] = useState('');
   const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoSourceType, setVideoSourceType] = useState<VideoSourceType>('upload');
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [youtubeError, setYoutubeError] = useState('');
   const [language, setLanguage] = useState<'en' | 'zh-TW'>('en');
   const [questions, setQuestions] = useState<string[]>(INITIAL_QUESTIONS);
   const [selectedPersonaId, setSelectedPersonaId] = useState<string>('acquisitions_director');
 
+  const handleYoutubeUrlChange = (url: string) => {
+    setYoutubeUrl(url);
+    if (url && !isValidYoutubeUrl(url)) {
+      setYoutubeError('Please enter a valid YouTube URL');
+    } else {
+      setYoutubeError('');
+    }
+  };
+
+  const isFormValid = () => {
+    if (isSubmitting) return false;
+    if (videoSourceType === 'upload') {
+      return !!videoFile;
+    } else {
+      return youtubeUrl && isValidYoutubeUrl(youtubeUrl);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!videoFile || isSubmitting) return;
+    if (!isFormValid()) return;
 
-    onStart({
-      id: Math.random().toString(36).substr(2, 9),
-      title,
-      synopsis,
-      videoFile,
-      videoUrl: URL.createObjectURL(videoFile),
-      videoFingerprint: {
-        fileName: videoFile.name,
-        fileSize: videoFile.size,
-        lastModified: videoFile.lastModified,
-      },
-      questions,
-      language,
-      selectedPersonaIds: [selectedPersonaId]
-    });
+    if (videoSourceType === 'youtube') {
+      onStart({
+        id: Math.random().toString(36).substr(2, 9),
+        title,
+        synopsis,
+        youtubeUrl,
+        questions,
+        language,
+        selectedPersonaIds: [selectedPersonaId]
+      });
+    } else {
+      onStart({
+        id: Math.random().toString(36).substr(2, 9),
+        title,
+        synopsis,
+        videoFile: videoFile!,
+        videoUrl: URL.createObjectURL(videoFile!),
+        videoFingerprint: {
+          fileName: videoFile!.name,
+          fileSize: videoFile!.size,
+          lastModified: videoFile!.lastModified,
+        },
+        questions,
+        language,
+        selectedPersonaIds: [selectedPersonaId]
+      });
+    }
   };
 
   const addQuestion = () => setQuestions([...questions, ""]);
@@ -97,42 +143,89 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onStart, isSubmitting = 
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold bg-slate-900 text-white px-2 py-0.5 rounded">02</span>
-              <label className="text-xs font-semibold uppercase tracking-widest text-slate-700">Upload Film</label>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold bg-slate-900 text-white px-2 py-0.5 rounded">02</span>
+                <label className="text-xs font-semibold uppercase tracking-widest text-slate-700">Video Source</label>
+              </div>
+              <div className="flex p-0.5 bg-slate-100 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => setVideoSourceType('upload')}
+                  className={`px-3 py-1 text-[10px] font-semibold rounded-md transition-all ${videoSourceType === 'upload' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
+                >
+                  Upload
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVideoSourceType('youtube')}
+                  className={`px-3 py-1 text-[10px] font-semibold rounded-md transition-all ${videoSourceType === 'youtube' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
+                >
+                  YouTube
+                </button>
+              </div>
             </div>
-            <div className="relative group">
-              <input
-                required
-                type="file"
-                accept="video/*"
-                className="hidden"
-                id="video-upload"
-                onChange={(e) => setVideoFile(e.target.files?.[0] || null)}
-              />
-              <label
-                htmlFor="video-upload"
-                className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-slate-200 bg-slate-50 rounded-xl cursor-pointer hover:border-slate-400 hover:bg-white transition-all"
-              >
-                {videoFile ? (
-                  <div className="text-center px-4">
-                    <div className="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center mb-3 mx-auto">
-                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" /></svg>
+            
+            {videoSourceType === 'upload' ? (
+              <div className="relative group">
+                <input
+                  type="file"
+                  accept="video/*"
+                  className="hidden"
+                  id="video-upload"
+                  onChange={(e) => setVideoFile(e.target.files?.[0] || null)}
+                />
+                <label
+                  htmlFor="video-upload"
+                  className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-slate-200 bg-slate-50 rounded-xl cursor-pointer hover:border-slate-400 hover:bg-white transition-all"
+                >
+                  {videoFile ? (
+                    <div className="text-center px-4">
+                      <div className="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center mb-3 mx-auto">
+                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" /></svg>
+                      </div>
+                      <p className="text-sm text-slate-900 font-semibold mb-0.5">File Selected</p>
+                      <p className="text-xs text-slate-400 truncate max-w-[180px]">{(videoFile.size / (1024 * 1024)).toFixed(0)}MB - {videoFile.name}</p>
                     </div>
-                    <p className="text-sm text-slate-900 font-semibold mb-0.5">File Selected</p>
-                    <p className="text-xs text-slate-400 truncate max-w-[180px]">{(videoFile.size / (1024 * 1024)).toFixed(0)}MB - {videoFile.name}</p>
-                  </div>
-                ) : (
-                  <div className="text-center px-6">
-                    <div className="w-10 h-10 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center mb-3 mx-auto group-hover:scale-105 transition-transform">
-                      <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                  ) : (
+                    <div className="text-center px-6">
+                      <div className="w-10 h-10 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center mb-3 mx-auto group-hover:scale-105 transition-transform">
+                        <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                      </div>
+                      <span className="text-sm font-semibold text-slate-700 block mb-0.5">Choose file</span>
+                      <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Video up to 2GB</span>
                     </div>
-                    <span className="text-sm font-semibold text-slate-700 block mb-0.5">Choose file</span>
-                    <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Video up to 2GB</span>
+                  )}
+                </label>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex flex-col items-center justify-center w-full h-48 border-2 border-slate-200 bg-slate-50 rounded-xl p-4">
+                  <div className="w-10 h-10 bg-red-600 rounded-xl flex items-center justify-center mb-3">
+                    <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/>
+                    </svg>
                   </div>
-                )}
-              </label>
-            </div>
+                  <input
+                    type="url"
+                    placeholder="https://youtube.com/watch?v=..."
+                    value={youtubeUrl}
+                    onChange={(e) => handleYoutubeUrlChange(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-sm focus:border-slate-900 focus:ring-1 focus:ring-slate-900 outline-none transition-all text-slate-900 placeholder:text-slate-300"
+                  />
+                  {youtubeError ? (
+                    <p className="text-xs text-red-500 mt-1">{youtubeError}</p>
+                  ) : youtubeUrl && isValidYoutubeUrl(youtubeUrl) ? (
+                    <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" /></svg>
+                      Valid YouTube URL
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-slate-400 mt-1">Paste a public YouTube video URL</p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="space-y-3">
@@ -240,7 +333,7 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onStart, isSubmitting = 
           type="submit" 
           className="w-full py-4 rounded-xl text-base font-semibold shadow-lg hover:shadow-xl hover:translate-y-[-2px] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-lg disabled:hover:translate-y-0" 
           size="lg"
-          disabled={isSubmitting || !videoFile}
+          disabled={!isFormValid()}
         >
           {isSubmitting ? 'Starting Review...' : 'Start Review'}
         </Button>

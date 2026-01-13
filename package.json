@@ -29,6 +29,7 @@
     "@types/jest": "^30.0.0",
     "@types/pg": "^8.16.0",
     "@types/supertest": "^6.0.3",
+    "@types/youtube": "^0.1.2",
     "@uppy/aws-s3": "^5.1.0",
     "@uppy/core": "^5.2.0",
     "@uppy/dashboard": "^5.1.0",
