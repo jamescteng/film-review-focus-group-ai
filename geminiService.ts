@@ -62,8 +62,8 @@ interface DirectUploadInitResponse {
 }
 
 interface DirectUploadStatusResponse {
-  status: 'UPLOADING' | 'STORED' | 'TRANSFERRING_TO_GEMINI' | 'ACTIVE' | 'FAILED';
-  progress: { stage: string; pct: number };
+  status: 'UPLOADING' | 'STORED' | 'COMPRESSING' | 'COMPRESSED' | 'TRANSFERRING_TO_GEMINI' | 'ACTIVE' | 'FAILED';
+  progress: { stage: string; pct: number; message?: string };
   geminiFileUri: string | null;
   lastError: string | null;
   mimeType?: string;
@@ -210,18 +210,26 @@ async function pollDirectUploadStatus(
     if (status.progress) {
       const stage = status.progress.stage;
       const pct = status.progress.pct;
+      const serverMessage = status.progress.message;
       
-      if (stage === 'uploading') {
-        const displayProgress = Math.floor(pct * 0.4);
-        onProgress?.(displayProgress);
+      onProgress?.(pct);
+      
+      if (serverMessage) {
+        onStatusMessage?.(serverMessage);
+      } else if (stage === 'uploading') {
+        onStatusMessage?.('Uploading video...');
       } else if (stage === 'stored') {
-        onProgress?.(40);
-      } else if (stage === 'transferring' || stage === 'processing') {
-        const displayProgress = 40 + Math.floor((pct / 100) * 55);
-        onProgress?.(displayProgress);
-        onStatusMessage?.('Preparing video for analysis...');
+        onStatusMessage?.('Upload complete, preparing video...');
+      } else if (stage === 'compressing') {
+        onStatusMessage?.('Creating optimized analysis copy...');
+      } else if (stage === 'compressed') {
+        onStatusMessage?.('Video optimized, preparing for review...');
+      } else if (stage === 'transferring') {
+        onStatusMessage?.('Sending to AI reviewer...');
+      } else if (stage === 'processing') {
+        onStatusMessage?.('AI is preparing to watch your video...');
       } else if (stage === 'ready') {
-        onProgress?.(100);
+        onStatusMessage?.('Ready for analysis!');
       }
     }
     
