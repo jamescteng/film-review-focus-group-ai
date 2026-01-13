@@ -150,7 +150,16 @@ router.post('/validate-youtube', statusLimiter, async (req, res) => {
     if (youtubeApiKey) {
       const apiUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,status&id=${videoId}&key=${youtubeApiKey}`;
       
-      const response = await fetch(apiUrl);
+      let response: Response;
+      try {
+        response = await fetch(apiUrl);
+      } catch (fetchError: any) {
+        FocalPointLogger.error("YouTube_API_Fetch", `Network error: ${fetchError.message || fetchError}`);
+        return res.json({ 
+          valid: false, 
+          error: 'Network error when verifying video. Please try again.' 
+        });
+      }
       
       if (!response.ok) {
         FocalPointLogger.warn("YouTube_API", `API returned ${response.status}`);
@@ -160,7 +169,16 @@ router.post('/validate-youtube', statusLimiter, async (req, res) => {
         });
       }
       
-      const data = await response.json();
+      let data: any;
+      try {
+        data = await response.json();
+      } catch (parseError: any) {
+        FocalPointLogger.error("YouTube_API_Parse", `JSON parse error: ${parseError.message}`);
+        return res.json({ 
+          valid: false, 
+          error: 'Failed to parse video data. Please try again.' 
+        });
+      }
       
       if (!data.items || data.items.length === 0) {
         return res.json({ 
@@ -202,10 +220,29 @@ router.post('/validate-youtube', statusLimiter, async (req, res) => {
       }
     } else {
       const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(youtubeUrl)}&format=json`;
-      const response = await fetch(oembedUrl);
+      
+      let response: Response;
+      try {
+        response = await fetch(oembedUrl);
+      } catch (fetchError: any) {
+        FocalPointLogger.error("YouTube_oEmbed_Fetch", `Network error: ${fetchError.message || fetchError}`);
+        return res.json({ 
+          valid: false, 
+          error: 'Network error when verifying video. Please try again.' 
+        });
+      }
       
       if (response.ok) {
-        const data = await response.json();
+        let data: any;
+        try {
+          data = await response.json();
+        } catch (parseError: any) {
+          FocalPointLogger.error("YouTube_oEmbed_Parse", `JSON parse error: ${parseError.message}`);
+          return res.json({ 
+            valid: false, 
+            error: 'Failed to parse video data. Please try again.' 
+          });
+        }
         return res.json({ 
           valid: true, 
           title: data.title,
