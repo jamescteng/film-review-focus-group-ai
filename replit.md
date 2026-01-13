@@ -75,6 +75,13 @@ FocalPoint AI utilizes a React 19 frontend with TypeScript and Vite 6, communica
 - **Session Management**: PostgreSQL + Drizzle ORM for persisting sessions and reports. This includes creating, listing, retrieving, updating, and deleting sessions and associated reports.
 - **Voice Script Generation**: Generate and cache voice scripts for reports, with optional audio generation via ElevenLabs.
 - **Podcast Dialogue Generation**: Generate two-reviewer podcast-style conversations from existing reports (English only).
+- **Full Internationalization (i18n)**: Complete multilingual support for English and Traditional Chinese (zh-TW).
+    - **Technology**: react-i18next with i18next-browser-languagedetector for language detection and localStorage persistence.
+    - **Language Switcher**: Globe icon dropdown in top-right navbar with flag indicators (US/TW).
+    - **Translation Files**: `src/locales/en.json` and `src/locales/zh-TW.json` contain all UI strings.
+    - **Report Language**: Defaults to current UI language setting but remains user-configurable.
+    - **Translation Rules**: "FocalPoint" brand name stays English; persona role titles translate (e.g., "資深發行總監" for Senior Acquisitions Director); randomly generated persona names (e.g., "Leila Moradi") remain unchanged.
+    - **Language Detection Order**: localStorage first, then browser navigator setting.
 
 ### System Design Choices
 - **Database**: PostgreSQL with Drizzle ORM for data persistence.
@@ -132,6 +139,12 @@ FocalPoint AI utilizes a React 19 frontend with TypeScript and Vite 6, communica
 - `components/VoicePlayer.tsx` - Voice note playback UI
 - `components/ReviewerPairPicker.tsx` - Podcast persona selection UI
 - `components/DialoguePlayer.tsx` - Podcast dialogue playback UI
+- `components/LanguageSwitcher.tsx` - UI language selection dropdown
+
+### Internationalization
+- `src/i18n.ts` - i18next configuration with language detection
+- `src/locales/en.json` - English translations
+- `src/locales/zh-TW.json` - Traditional Chinese translations
 
 ### Shared
 - `shared/schema.ts` - Database schema definitions (Drizzle ORM)
