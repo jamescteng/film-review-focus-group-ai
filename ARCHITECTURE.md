@@ -42,9 +42,12 @@ Browser (React/Vite:5000) ──proxy──> Express:3001 ──> Gemini AI
 
 ### Upload → Analysis
 1. Browser uploads to Object Storage via presigned URL
-2. Server compresses to 720p/10fps proxy (~85% size reduction)
-3. Proxy transferred to Gemini Files API
-4. Analysis runs when file status = ACTIVE
+2. Server probes video metadata (size, resolution, fps)
+3. **Smart Compression Decision**:
+   - Skip compression if: file ≤60MB AND resolution ≤720p AND fps ≤10
+   - Otherwise: compress to 720p/10fps proxy (~85% size reduction)
+4. File (original or proxy) transferred to Gemini Files API
+5. Analysis runs when file status = ACTIVE
 
 ### YouTube → Analysis
 1. URL validated via YouTube Data API v3

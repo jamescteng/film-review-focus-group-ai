@@ -5,7 +5,7 @@ AI-powered focus group feedback for indie filmmakers using Google Gemini AI.
 ## Features
 
 - **Multi-Persona Analysis** - Four AI reviewers with distinct perspectives analyze your video simultaneously
-- **YouTube or Upload** - Paste public YouTube URLs or upload files up to 2GB (auto-compressed to 720p/10fps)
+- **YouTube or Upload** - Paste public YouTube URLs or upload files up to 2GB (smart compression: only applied when needed)
 - **Timestamped Feedback** - Highlights and concerns linked to exact video moments
 - **Voice Notes** - ElevenLabs audio summaries from each reviewer
 - **Podcast Dialogues** - Two-reviewer conversations discussing your film (English only)
@@ -26,6 +26,12 @@ AI-powered focus group feedback for indie filmmakers using Google Gemini AI.
 npm install
 npm run db:push
 npm run dev
+```
+
+Run tests:
+```bash
+npx jest --config jest.config.cjs   # Server tests
+npm test                             # Frontend tests (Vitest)
 ```
 
 Required secrets: `GEMINI_API_KEY`, `ELEVENLABS_API_KEY`, `YOUTUBE_API_KEY`
