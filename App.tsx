@@ -179,7 +179,7 @@ const App: React.FC = () => {
     }
     
     if (isYoutubeSession) {
-      setProcessProgress(50);
+      setProcessProgress(prev => Math.max(prev, 85));
       setStatusMessage(t('processing.preparingYoutube'));
     } else if (p.videoFile) {
       try {
@@ -187,7 +187,7 @@ const App: React.FC = () => {
         currentUploadResult = await uploadVideo(
           p.videoFile, 
           (progress) => {
-            setProcessProgress(progress);
+            setProcessProgress(prev => Math.max(prev, progress));
           }, 
           attemptId,
           (message) => {
@@ -232,12 +232,12 @@ const App: React.FC = () => {
     
     setAnalyzingPersonaId(personaId);
     setStatusMessage(t('processing.runningAppraisal', { persona: persona?.name || personaId }));
-    setProcessProgress(60);
+    setProcessProgress(prev => Math.max(prev, 90));
     
     try {
       const report = await analyzeWithPersona(p, currentUploadResult, personaId);
       setReports([report]);
-      setProcessProgress(100);
+      setProcessProgress(prev => Math.max(prev, 100));
       setAnalyzingPersonaId(null);
       
       if (sessionId) {
@@ -428,8 +428,8 @@ const App: React.FC = () => {
               personas={selectedPersonas} 
               currentIndex={0} 
               progress={processProgress}
+              statusMessage={statusMessage}
             />
-            <p className="text-slate-400 text-xs sm:text-sm uppercase tracking-[0.15em] sm:tracking-[0.3em] md:tracking-[0.6em] mt-4 sm:mt-8 md:mt-12 animate-pulse font-black text-center max-w-full">{statusMessage}</p>
           </div>
         )}
 

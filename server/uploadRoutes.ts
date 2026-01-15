@@ -225,7 +225,7 @@ router.post('/complete', jsonParser, async (req: Request, res: Response) => {
       .update(uploads)
       .set({
         status: 'STORED',
-        progress: { stage: 'stored', pct: 40, message: 'Upload complete' },
+        progress: { stage: 'stored', pct: 5, message: 'Upload complete' },
         updatedAt: new Date(),
       })
       .where(eq(uploads.uploadId, uploadId));
@@ -298,7 +298,7 @@ async function compressAndTransferToGemini(uploadId: string): Promise<void> {
       .update(uploads)
       .set({
         status: 'COMPRESSING',
-        progress: { stage: 'compressing', pct: 41, message: 'Downloading for compression...' },
+        progress: { stage: 'compressing', pct: 5, message: 'Downloading for compression...' },
         updatedAt: new Date(),
       })
       .where(eq(uploads.uploadId, uploadId));
@@ -352,7 +352,7 @@ async function compressAndTransferToGemini(uploadId: string): Promise<void> {
       const compressionResult = await compressVideoForAnalysis(
         tempInputPath,
         (progress) => {
-          const pct = 45 + Math.floor(progress.percent * 0.3);
+          const pct = 5 + Math.floor(progress.percent * 0.50);
           progressManager.updateProgress({
             stage: 'compressing',
             pct,
@@ -497,7 +497,7 @@ async function compressAndTransferToGemini(uploadId: string): Promise<void> {
 
         offset += chunk.length;
         const transferPct = Math.floor((offset / fileSize) * 100);
-        const overallPct = 80 + Math.floor(transferPct * 0.15);
+        const overallPct = 65 + Math.floor(transferPct * 0.20);
         
         console.log(`[Upload] Gemini transfer ${uploadId}: ${transferPct}% (${Math.round(offset / 1024 / 1024)}MB / ${Math.round(fileSize / 1024 / 1024)}MB)`);
         

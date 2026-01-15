@@ -7,9 +7,10 @@ interface ProcessingQueueProps {
   personas: Persona[];
   currentIndex: number;
   progress: number; // 0 to 100
+  statusMessage?: string;
 }
 
-export const ProcessingQueue: React.FC<ProcessingQueueProps> = ({ personas, currentIndex, progress }) => {
+export const ProcessingQueue: React.FC<ProcessingQueueProps> = ({ personas, currentIndex, progress, statusMessage }) => {
   const { t } = useTranslation();
   const currentPersona = personas[currentIndex];
   
@@ -30,12 +31,18 @@ export const ProcessingQueue: React.FC<ProcessingQueueProps> = ({ personas, curr
         </p>
       </div>
 
-      <div className="relative h-1 sm:h-1.5 md:h-2 w-full bg-zinc-100 rounded-full overflow-hidden mb-4 sm:mb-8 md:mb-12 lg:mb-20">
+      <div className="relative h-1 sm:h-1.5 md:h-2 w-full bg-zinc-100 rounded-full overflow-hidden mb-2 sm:mb-3 md:mb-4">
         <div 
           className="absolute top-0 left-0 h-full bg-black transition-all duration-1000 ease-in-out"
           style={{ width: `${progress}%` }}
         />
       </div>
+
+      {statusMessage && (
+        <p className="text-slate-400 text-xs sm:text-sm uppercase tracking-[0.15em] sm:tracking-[0.2em] mb-4 sm:mb-8 md:mb-12 lg:mb-16 animate-pulse font-black text-center">
+          {statusMessage}
+        </p>
+      )}
 
       <div className="flex flex-col items-center">
         <div className="relative group">

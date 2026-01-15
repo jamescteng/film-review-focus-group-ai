@@ -114,6 +114,7 @@ export class ProgressFlushManager {
   private inFlight: Promise<void> | null = null;
   private pendingProgress: ProgressPayload | null = null;
   private lastFlushedPct: number = 0;
+  private maxSeenPct: number = 0;
   private flushIntervalMs: number;
   private minPctChange: number;
   
@@ -127,6 +128,11 @@ export class ProgressFlushManager {
   }
   
   updateProgress(progress: ProgressPayload): void {
+    if (progress.pct < this.maxSeenPct) {
+      return;
+    }
+    this.maxSeenPct = progress.pct;
+    
     this.pendingProgress = progress;
     
     if (this.inFlight) {
@@ -135,7 +141,7 @@ export class ProgressFlushManager {
     
     const now = Date.now();
     const timeSinceLastFlush = now - this.lastFlushAt;
-    const pctChange = Math.abs(progress.pct - this.lastFlushedPct);
+    const pctChange = progress.pct - this.lastFlushedPct;
     
     const shouldFlush = 
       timeSinceLastFlush >= this.flushIntervalMs || 
@@ -221,14 +227,14 @@ interface MilestoneData {
 }
 
 const MILESTONE_DEFINITIONS: Record<MilestoneType, MilestoneData> = {
-  ANALYZING: { stage: 'analyzing', pct: 43, message: 'Analyzing video...' },
-  COMPRESS_STARTED: { stage: 'compressing', pct: 45, message: 'Creating analysis proxy (720p, 10fps)...' },
-  COMPRESS_DONE: { stage: 'compressed', pct: 75, message: 'Compression complete' },
-  SKIPPED_COMPRESSION: { stage: 'skipped_compression', pct: 75, message: 'Video already optimized, proceeding...' },
-  UPLOADING_PROXY: { stage: 'uploading_proxy', pct: 77, message: 'Uploading proxy to storage...' },
-  GEMINI_UPLOAD_STARTED: { stage: 'transferring', pct: 80, message: 'Sending to AI reviewer...' },
-  GEMINI_UPLOAD_DONE: { stage: 'transferred', pct: 95, message: 'Transfer complete, awaiting processing...' },
-  PROCESSING_ACTIVE: { stage: 'processing', pct: 97, message: 'AI reviewer is getting ready...' },
+  ANALYZING: { stage: 'analyzing', pct: 5, message: 'Analyzing video...' },
+  COMPRESS_STARTED: { stage: 'compressing', pct: 5, message: 'Creating analysis proxy (720p, 10fps)...' },
+  COMPRESS_DONE: { stage: 'compressed', pct: 55, message: 'Compression complete' },
+  SKIPPED_COMPRESSION: { stage: 'skipped_compression', pct: 55, message: 'Video already optimized, proceeding...' },
+  UPLOADING_PROXY: { stage: 'uploading_proxy', pct: 55, message: 'Uploading proxy to storage...' },
+  GEMINI_UPLOAD_STARTED: { stage: 'transferring', pct: 65, message: 'Sending to AI reviewer...' },
+  GEMINI_UPLOAD_DONE: { stage: 'transferred', pct: 85, message: 'Transfer complete, awaiting processing...' },
+  PROCESSING_ACTIVE: { stage: 'processing', pct: 90, message: 'AI reviewer is getting ready...' },
   READY: { stage: 'ready', pct: 100, message: 'Ready for analysis!' },
   JOB_FAILED: { stage: 'failed', pct: 0, message: 'Upload processing failed' },
 };
