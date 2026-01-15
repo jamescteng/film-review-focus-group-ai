@@ -336,6 +336,38 @@ export const uploadVideo = async (
   }
 };
 
+const ANALYSIS_TIMEOUT_MS = 90000;
+const MAX_RETRIES = 1;
+
+const isNetworkError = (error: any): boolean => {
+  const message = error?.message?.toLowerCase() || '';
+  return message.includes('load failed') || 
+         message.includes('failed to fetch') || 
+         message.includes('network') ||
+         message.includes('aborted') ||
+         error?.name === 'AbortError' ||
+         error?.name === 'TypeError';
+};
+
+const fetchWithTimeout = async (
+  url: string,
+  options: RequestInit,
+  timeoutMs: number
+): Promise<Response> => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
 export const analyzeWithPersona = async (
   project: Project,
   uploadResult: UploadResult | null,
@@ -357,50 +389,76 @@ export const analyzeWithPersona = async (
     youtubeUrl: isYoutubeSession ? '[YouTube]' : undefined
   });
 
-  try {
-    const response = await fetch('/api/analyze', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        title: project.title,
-        synopsis: project.synopsis,
-        srtContent: project.srtContent || '',
-        questions: project.questions,
-        language: project.language,
-        fileUri: uploadResult?.fileUri,
-        fileMimeType: uploadResult?.fileMimeType,
-        youtubeUrl: project.youtubeUrl,
-        personaIds: [personaId]
-      })
-    });
+  const requestBody = JSON.stringify({
+    title: project.title,
+    synopsis: project.synopsis,
+    srtContent: project.srtContent || '',
+    questions: project.questions,
+    language: project.language,
+    fileUri: uploadResult?.fileUri,
+    fileMimeType: uploadResult?.fileMimeType,
+    youtubeUrl: project.youtubeUrl,
+    personaIds: [personaId]
+  });
 
-    if (!response.ok) {
-      const errorData = await safeJsonParse<{ error?: string }>(response);
-      throw new Error(errorData.error || `Server error: ${response.status}`);
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      if (attempt > 0) {
+        FocalPointLogger.info("API_Retry", { attempt, persona: personaId });
+      }
+
+      const response = await fetchWithTimeout('/api/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: requestBody
+      }, ANALYSIS_TIMEOUT_MS);
+
+      if (!response.ok) {
+        const errorData = await safeJsonParse<{ error?: string }>(response);
+        throw new Error(errorData.error || `Server error: ${response.status}`);
+      }
+
+      const data = await safeJsonParse<AnalyzeResponse>(response);
+      FocalPointLogger.info("API_Success", `Received ${data.results.length} persona report(s)`);
+      
+      const result = data.results[0];
+      if (!result || result.status !== 'success' || !result.report) {
+        throw new Error(result?.error || 'Analysis failed');
+      }
+
+      return {
+        personaId: result.personaId,
+        executive_summary: result.report.executive_summary,
+        highlights: result.report.highlights,
+        concerns: result.report.concerns,
+        answers: result.report.answers,
+        validationWarnings: result.validationWarnings
+      };
+    } catch (error: any) {
+      lastError = error;
+      FocalPointLogger.error("API_Call", { attempt, error: error.message });
+      
+      if (error.name === 'AbortError') {
+        throw new Error('Screening failed: Request timed out. Please try again.');
+      }
+      
+      if (!isNetworkError(error) || attempt >= MAX_RETRIES) {
+        break;
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
-
-    const data = await safeJsonParse<AnalyzeResponse>(response);
-    FocalPointLogger.info("API_Success", `Received ${data.results.length} persona report(s)`);
-    
-    const result = data.results[0];
-    if (!result || result.status !== 'success' || !result.report) {
-      throw new Error(result?.error || 'Analysis failed');
-    }
-
-    return {
-      personaId: result.personaId,
-      executive_summary: result.report.executive_summary,
-      highlights: result.report.highlights,
-      concerns: result.report.concerns,
-      answers: result.report.answers,
-      validationWarnings: result.validationWarnings
-    };
-  } catch (error: any) {
-    FocalPointLogger.error("API_Call", error);
-    throw new Error(`Screening failed: ${error.message}`);
   }
+  
+  const errorMessage = lastError?.message || 'Unknown error';
+  if (isNetworkError(lastError)) {
+    throw new Error('Screening failed: Network connection lost. Please check your connection and try again.');
+  }
+  throw new Error(`Screening failed: ${errorMessage}`);
 };
 
 export interface PersonaAlias {
