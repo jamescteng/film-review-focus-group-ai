@@ -44,6 +44,18 @@ AI focus group platform for indie filmmakers. Gemini AI analyzes videos through 
 | `shared/schema.ts` | Drizzle database schema |
 | `geminiService.ts` | Frontend Gemini client |
 
+## Progress Tracking
+Progress bar ranges (monotonic, never goes backward):
+- **Upload**: 0-5% (file upload to server)
+- **Compression**: 5-55% (FFmpeg 720p/10fps proxy)
+- **Storage Upload**: 55-65% (proxy to Replit storage)
+- **Gemini Transfer**: 65-85% (video to Gemini API)
+- **AI Processing**: 85-100% (analysis by persona)
+- **YouTube path**: Jumps to 85% (skips upload/compression)
+
+Server: `ProgressFlushManager` tracks `maxSeenPct` to reject backward updates.
+Frontend: All `setProcessProgress` calls use `Math.max(prev, X)` pattern.
+
 ## Security
 - Rate limiting: voice/podcast 1/min, polling 20/min
 - Error sanitization: generic client messages, detailed server logs
