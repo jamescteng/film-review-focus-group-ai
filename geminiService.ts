@@ -336,7 +336,7 @@ export const uploadVideo = async (
   }
 };
 
-const ANALYSIS_TIMEOUT_MS = 90000;
+const ANALYSIS_TIMEOUT_MS = 180000;
 const MAX_RETRIES = 1;
 
 const isNetworkError = (error: any): boolean => {

@@ -410,7 +410,7 @@ const App: React.FC = () => {
         </div>
       )}
 
-      <div className="relative pt-24 pb-20">
+      <div className="relative pt-16 sm:pt-20 md:pt-24 pb-8 sm:pb-12 md:pb-20">
         {state === AppState.IDLE && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
             {errorMessage && (
@@ -423,13 +423,13 @@ const App: React.FC = () => {
         )}
 
         {state === AppState.ANALYZING && project && (
-          <div className="flex flex-col items-center">
+          <div className="flex flex-col items-center px-4">
             <ProcessingQueue 
               personas={selectedPersonas} 
               currentIndex={0} 
               progress={processProgress}
             />
-            <p className="text-slate-400 text-sm uppercase tracking-[0.6em] mt-12 animate-pulse font-black">{statusMessage}</p>
+            <p className="text-slate-400 text-xs sm:text-sm uppercase tracking-[0.15em] sm:tracking-[0.3em] md:tracking-[0.6em] mt-4 sm:mt-8 md:mt-12 animate-pulse font-black text-center max-w-full">{statusMessage}</p>
           </div>
         )}
 
