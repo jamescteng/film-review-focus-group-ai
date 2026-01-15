@@ -13,6 +13,11 @@ router.get('/:id/reports', statusLimiter, async (req, res) => {
     }
     
     const reports = await storage.getReportsBySession(sessionId);
+    FocalPointLogger.info("Reports_Fetched", { 
+      sessionId, 
+      reportCount: reports.length,
+      personaIds: reports.map(r => r.personaId)
+    });
     res.json(reports);
   } catch (error: any) {
     FocalPointLogger.error("Reports_List", error.message);

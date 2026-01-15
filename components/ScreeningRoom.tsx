@@ -313,20 +313,52 @@ export const ScreeningRoom: React.FC<ScreeningRoomProps> = ({
 
   const completedPersonaIds = reports.map(r => r.personaId);
 
-  if (!activeReport || !activePersona) {
-    console.warn('[ScreeningRoom] Invalid state:', { 
+  if (reports.length === 0 || !activeReport || !activePersona) {
+    console.warn('[ScreeningRoom] No reports or invalid state:', { 
       reportsLength: reports.length, 
       activeReportIndex, 
       activeReport: !!activeReport,
       activePersona: !!activePersona,
       sessionId 
     });
+    
+    const handleDeleteSession = async () => {
+      if (!sessionId) return;
+      if (!confirm(t('sessions.deleteConfirm'))) return;
+      try {
+        const response = await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
+        if (response.ok) {
+          window.location.reload();
+        } else {
+          alert(t('errors.failedToDelete'));
+        }
+      } catch (err) {
+        console.error('Failed to delete session:', err);
+        alert(t('errors.failedToDelete'));
+      }
+    };
+    
     return (
-      <div className="p-24 text-center">
-        <p className="text-slate-400 text-xl mb-4">{t('screeningRoom.noReportsYet')}</p>
-        <Button variant="outline" onClick={() => window.location.reload()}>
-          {t('screeningRoom.newScreening')}
-        </Button>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+        <div className="max-w-md text-center">
+          <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <svg className="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-slate-900 mb-2">{t('screeningRoom.noReportsYet')}</h2>
+          <p className="text-slate-500 mb-8">{t('screeningRoom.noReportsDescription')}</p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Button onClick={() => window.location.reload()}>
+              {t('screeningRoom.startNewSession')}
+            </Button>
+            {sessionId && (
+              <Button variant="outline" onClick={handleDeleteSession} className="text-rose-600 border-rose-200 hover:bg-rose-50">
+                {t('screeningRoom.deleteIncompleteSession')}
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
     );
   }
