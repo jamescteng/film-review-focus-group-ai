@@ -28,7 +28,7 @@ const DEFAULT_OPTIONS: CompressionOptions = {
   targetWidth: 1280,
   targetHeight: 720,
   targetFps: 10,
-  crf: 28,
+  crf: 30,
   audioBitrate: '64k',
 };
 
@@ -55,9 +55,10 @@ export async function compressVideoForAnalysis(
     
     ffmpeg(inputPath)
       .outputOptions([
+        '-threads 0',
         '-c:v libx264',
         `-crf ${opts.crf}`,
-        '-preset veryfast',
+        '-preset ultrafast',
         `-vf scale=${opts.targetWidth}:${opts.targetHeight}:force_original_aspect_ratio=decrease,pad=${opts.targetWidth}:${opts.targetHeight}:(ow-iw)/2:(oh-ih)/2,fps=${opts.targetFps}`,
         '-movflags +faststart',
         '-c:a aac',

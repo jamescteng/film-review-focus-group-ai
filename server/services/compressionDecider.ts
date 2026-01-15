@@ -19,7 +19,7 @@ export interface CompressionThresholds {
 }
 
 const DEFAULT_THRESHOLDS: CompressionThresholds = {
-  maxFileSizeMB: 60,
+  maxFileSizeMB: 100,
   maxHeight: 720,
   maxFps: 10,
 };
