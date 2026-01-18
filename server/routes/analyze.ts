@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { GoogleGenAI, Type, createPartFromUri } from "@google/genai";
 import { getPersonaById, getAllPersonas, PersonaConfig } from '../personas.js';
 import { FocalPointLogger } from '../utils/logger.js';
-import { analyzeLimiter } from '../middleware/rateLimiting.js';
+import { analyzeLimiter, analyzeStatusLimiter } from '../middleware/rateLimiting.js';
 import { 
   MAX_TITLE_LENGTH,
   MAX_SYNOPSIS_LENGTH,
@@ -11,6 +11,10 @@ import {
   MAX_QUESTIONS_COUNT,
   VALID_LANGUAGES
 } from '../middleware/validation.js';
+import { db } from '../db.js';
+import { analysisJobs } from '../../shared/schema.js';
+import { eq } from 'drizzle-orm';
+import crypto from 'crypto';
 
 const router = Router();
 
@@ -321,9 +325,74 @@ function isValidYoutubeUrl(url: string): boolean {
   return YOUTUBE_URL_REGEX.test(url);
 }
 
+interface AnalyzeRequestExtended extends AnalyzeRequest {
+  sessionId?: number;
+}
+
+function generateJobId(): string {
+  return `aj_${crypto.randomBytes(16).toString('hex')}`;
+}
+
+async function processAnalysisJob(
+  jobId: string,
+  sessionId: number,
+  personaId: string,
+  params: {
+    title: string;
+    synopsis: string;
+    srtContent: string;
+    questions: string[];
+    langName: string;
+    fileUri?: string;
+    fileMimeType?: string;
+    youtubeUrl?: string;
+  }
+): Promise<void> {
+  try {
+    const ai = getAI();
+    const persona = getPersonaById(personaId);
+    
+    if (!persona) {
+      await db.update(analysisJobs)
+        .set({ status: 'failed', lastError: `Invalid persona: ${personaId}`, completedAt: new Date() })
+        .where(eq(analysisJobs.jobId, jobId));
+      return;
+    }
+
+    await db.update(analysisJobs)
+      .set({ status: 'processing' })
+      .where(eq(analysisJobs.jobId, jobId));
+
+    const result = await analyzeWithPersona(ai, persona, params);
+
+    if (result.status === 'success') {
+      await db.update(analysisJobs)
+        .set({ 
+          status: 'completed', 
+          result: { ...result, sessionId },
+          completedAt: new Date() 
+        })
+        .where(eq(analysisJobs.jobId, jobId));
+    } else {
+      await db.update(analysisJobs)
+        .set({ 
+          status: 'failed', 
+          lastError: result.error || 'Analysis failed',
+          completedAt: new Date() 
+        })
+        .where(eq(analysisJobs.jobId, jobId));
+    }
+  } catch (error: any) {
+    FocalPointLogger.error("Analysis_Job_Error", { jobId, error: error.message });
+    await db.update(analysisJobs)
+      .set({ status: 'failed', lastError: error.message, completedAt: new Date() })
+      .where(eq(analysisJobs.jobId, jobId));
+  }
+}
+
 router.post('/', analyzeLimiter, async (req, res) => {
   try {
-    const { title, synopsis, srtContent, questions, language, fileUri, fileMimeType, youtubeUrl, personaIds } = req.body as AnalyzeRequest;
+    const { title, synopsis, srtContent, questions, language, fileUri, fileMimeType, youtubeUrl, personaIds, sessionId } = req.body as AnalyzeRequestExtended;
 
     if (!title || !title.trim()) {
       return res.status(400).json({ error: "Title is required." });
@@ -374,6 +443,10 @@ router.post('/', analyzeLimiter, async (req, res) => {
       return res.status(400).json({ error: "Invalid file URI format." });
     }
 
+    if (!sessionId || typeof sessionId !== 'number') {
+      return res.status(400).json({ error: "Session ID is required." });
+    }
+
     const allPersonaIds = getAllPersonas().map(p => p.id);
     const selectedPersonaIds = personaIds && personaIds.length > 0 ? personaIds : ['acquisitions_director'];
     
@@ -383,46 +456,111 @@ router.post('/', analyzeLimiter, async (req, res) => {
       }
     }
 
-    const personas = selectedPersonaIds.map(id => getPersonaById(id)).filter((p): p is PersonaConfig => p !== undefined);
+    const langName = language === 'zh-TW' ? 'Traditional Chinese (Taiwan)' : 'English';
+    const jobIds: string[] = [];
 
-    if (personas.length === 0) {
-      return res.status(400).json({ error: "No valid personas selected." });
+    for (const personaId of selectedPersonaIds) {
+      const jobId = generateJobId();
+      jobIds.push(jobId);
+
+      await db.insert(analysisJobs).values({
+        jobId,
+        sessionId,
+        personaId,
+        status: 'pending',
+      });
+
+      processAnalysisJob(jobId, sessionId, personaId, {
+        title,
+        synopsis,
+        srtContent,
+        questions,
+        langName,
+        fileUri: hasFileUri ? fileUri : undefined,
+        fileMimeType: hasFileUri ? fileMimeType : undefined,
+        youtubeUrl: hasYoutube ? youtubeUrl : undefined
+      }).catch(err => {
+        FocalPointLogger.error("Analysis_Background_Error", { jobId, error: err.message });
+      });
     }
 
-    const ai = getAI();
-    const langName = language === 'zh-TW' ? 'Traditional Chinese (Taiwan)' : 'English';
-
-    FocalPointLogger.info("Analysis_Start", { 
-      personas: personas.map(p => p.id), 
-      fileUri: hasFileUri ? fileUri : undefined,
+    FocalPointLogger.info("Analysis_Jobs_Created", { 
+      jobIds,
+      sessionId,
+      personas: selectedPersonaIds,
       youtubeUrl: hasYoutube ? '[YouTube]' : undefined
     });
 
-    const results = await Promise.all(
-      personas.map(persona => 
-        analyzeWithPersona(ai, persona, {
-          title,
-          synopsis,
-          srtContent,
-          questions,
-          langName,
-          fileUri: hasFileUri ? fileUri : undefined,
-          fileMimeType: hasFileUri ? fileMimeType : undefined,
-          youtubeUrl: hasYoutube ? youtubeUrl : undefined
-        })
-      )
-    );
-
-    FocalPointLogger.info("Analysis_Complete", { 
-      total: results.length, 
-      successful: results.filter(r => r.status === 'success').length 
-    });
-
-    res.json({ results });
+    res.json({ jobIds, status: 'pending' });
 
   } catch (error: any) {
     FocalPointLogger.error("API_Call", error);
     res.status(500).json({ error: "Analysis failed. Please try again." });
+  }
+});
+
+router.get('/status/:jobId', analyzeStatusLimiter, async (req, res) => {
+  try {
+    const { jobId } = req.params;
+
+    if (!jobId || !jobId.startsWith('aj_')) {
+      return res.status(400).json({ error: "Invalid job ID." });
+    }
+
+    const [job] = await db.select()
+      .from(analysisJobs)
+      .where(eq(analysisJobs.jobId, jobId))
+      .limit(1);
+
+    if (!job) {
+      return res.status(404).json({ error: "Job not found." });
+    }
+
+    res.json({
+      jobId: job.jobId,
+      sessionId: job.sessionId,
+      personaId: job.personaId,
+      status: job.status,
+      result: job.status === 'completed' ? job.result : undefined,
+      error: job.status === 'failed' ? job.lastError : undefined,
+      createdAt: job.createdAt,
+      completedAt: job.completedAt,
+    });
+
+  } catch (error: any) {
+    FocalPointLogger.error("Analysis_Status_Error", error);
+    res.status(500).json({ error: "Failed to get job status." });
+  }
+});
+
+router.get('/status/session/:sessionId', analyzeStatusLimiter, async (req, res) => {
+  try {
+    const sessionId = parseInt(req.params.sessionId);
+
+    if (isNaN(sessionId)) {
+      return res.status(400).json({ error: "Invalid session ID." });
+    }
+
+    const jobs = await db.select()
+      .from(analysisJobs)
+      .where(eq(analysisJobs.sessionId, sessionId));
+
+    res.json({
+      sessionId,
+      jobs: jobs.map(job => ({
+        jobId: job.jobId,
+        personaId: job.personaId,
+        status: job.status,
+        result: job.status === 'completed' ? job.result : undefined,
+        error: job.status === 'failed' ? job.lastError : undefined,
+        createdAt: job.createdAt,
+        completedAt: job.completedAt,
+      })),
+    });
+
+  } catch (error: any) {
+    FocalPointLogger.error("Analysis_Session_Status_Error", error);
+    res.status(500).json({ error: "Failed to get session jobs." });
   }
 });
 

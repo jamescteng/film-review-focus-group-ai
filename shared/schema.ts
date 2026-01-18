@@ -124,6 +124,25 @@ export interface DialogueScript {
   };
 }
 
+export const analysisJobs = pgTable("analysis_jobs", {
+  id: serial("id").primaryKey(),
+  jobId: varchar("job_id", { length: 64 }).notNull().unique(),
+  sessionId: integer("session_id").references(() => sessions.id, { onDelete: "cascade" }).notNull(),
+  personaId: varchar("persona_id", { length: 50 }).notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("pending"),
+  result: jsonb("result").$type<any>(),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const analysisJobsRelations = relations(analysisJobs, ({ one }) => ({
+  session: one(sessions, {
+    fields: [analysisJobs.sessionId],
+    references: [sessions.id],
+  }),
+}));
+
 export const dialogueJobs = pgTable("dialogue_jobs", {
   id: serial("id").primaryKey(),
   sessionId: integer("session_id").references(() => sessions.id, { onDelete: "cascade" }).notNull(),
@@ -185,3 +204,5 @@ export type VoiceScript = typeof voiceScripts.$inferSelect;
 export type InsertVoiceScript = typeof voiceScripts.$inferInsert;
 export type DialogueJob = typeof dialogueJobs.$inferSelect;
 export type InsertDialogueJob = typeof dialogueJobs.$inferInsert;
+export type AnalysisJob = typeof analysisJobs.$inferSelect;
+export type InsertAnalysisJob = typeof analysisJobs.$inferInsert;

@@ -68,3 +68,11 @@ export const dialogueStatusLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+export const analyzeStatusLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 60, // 60 status polls per minute per IP (polling every 2s = 30/min)
+  message: { error: 'Too many status requests. Please slow down.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
